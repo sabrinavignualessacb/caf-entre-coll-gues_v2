@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "colleagues": {
+      "title": "Colleagues",
+      "description": "Colleagues participating in coffee rounds",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "avatar": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "coffee_rounds": {
+      "title": "Coffee Rounds",
+      "description": "Logged coffee rounds with payer and beneficiaries",
+      "type": "object",
+      "properties": {
+        "payerId": { "type": "string" },
+        "payerName": { "type": "string" },
+        "cupsPaid": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "beneficiaryIds": { "type": "array", "items": { "type": "string" } },
+        "beneficiaryNames": { "type": "array", "items": { "type": "string" } },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["payerId", "cupsPaid", "beneficiaryIds"]
+    },
+    "group_settings": {
+      "title": "Group Settings",
+      "description": "Global settings for the coffee group",
+      "type": "object",
+      "properties": {
+        "pricePerCup": { "type": "number" },
+        "currency": { "type": "string" },
+        "groupName": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Suivi Café entre Collègues",
+  "description": "Application mobile pour noter qui paie et qui consomme le café, calculer qui doit payer le prochain, et tout synchroniser en temps réel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
