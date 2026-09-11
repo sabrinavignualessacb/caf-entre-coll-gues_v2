@@ -31,8 +31,12 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top App Bar */}
       <div className="max-w-xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${theme.headerIconBg} flex items-center justify-center ${theme.headerIconText} shadow-xs`}>
-            <Coffee className="w-4 h-4 sm:w-5 sm:h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden shadow-sm border border-slate-700/50 bg-slate-800 shrink-0 flex items-center justify-center">
+            <img
+              src="/icon.png"
+              alt="Logo Pause Café"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div>
             <h1 className={`font-bold text-base sm:text-lg leading-tight tracking-tight ${theme.headerTitle} flex items-center gap-1.5`}>

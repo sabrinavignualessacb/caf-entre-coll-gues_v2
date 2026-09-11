@@ -92,8 +92,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-10 sm:pt-4 bg-slate-900/60 backdrop-blur-xs">
+      <div className="bg-white w-full max-w-lg rounded-[28px] sm:rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 max-h-[calc(100dvh-2.5rem)] sm:max-h-[88dvh] flex flex-col">
         {/* Header */}
         <div className="bg-slate-900 text-white p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5">

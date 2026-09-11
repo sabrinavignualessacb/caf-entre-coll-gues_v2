@@ -249,19 +249,28 @@ export const AddRoundModal: React.FC<AddRoundModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pt-10 sm:pt-4 bg-slate-900/60 backdrop-blur-xs">
+      <div className="bg-white w-full max-w-lg rounded-t-[28px] sm:rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 max-h-[calc(100dvh-2.5rem)] sm:max-h-[88dvh] flex flex-col animate-in slide-in-from-bottom duration-200">
+        {/* Mobile Pull Handle */}
+        <div className="sm:hidden w-full flex justify-center pt-2.5 pb-1 bg-slate-900 shrink-0">
+          <div className="w-10 h-1 bg-slate-700 rounded-full" />
+        </div>
+
         {/* Header */}
-        <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 text-emerald-400">
-              <Coffee className="w-5 h-5 text-emerald-400" />
+        <div className="bg-slate-900 text-white px-4 py-3 sm:p-5 flex items-center justify-between shrink-0 border-b border-slate-800">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden shadow-xs border border-slate-700 bg-slate-800 shrink-0 flex items-center justify-center">
+              <img
+                src="/icon.png"
+                alt="Logo Café"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
-              <h2 className="font-bold text-base sm:text-lg text-white">
+              <h2 className="font-bold text-sm sm:text-lg text-white leading-tight">
                 {roundToEdit ? 'Modifier la Tournée' : 'Saisir une Tournée de Café'}
               </h2>
-              <p className="text-xs text-slate-400 font-medium">
+              <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
                 {roundToEdit ? 'Corrigez les erreurs de saisie pour cette tournée' : 'Notez qui paie et qui consomme'}
               </p>
             </div>
@@ -276,7 +285,7 @@ export const AddRoundModal: React.FC<AddRoundModalProps> = ({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 overscroll-contain pb-6">
           {/* Edit Mode Notice Banner */}
           {roundToEdit && (
             <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-amber-900 shadow-xs">
