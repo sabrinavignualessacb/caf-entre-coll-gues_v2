@@ -21,13 +21,14 @@ import { AddRoundModal } from './components/AddRoundModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InitialBaseModal } from './components/InitialBaseModal';
 import { WheelOfFortuneModal } from './components/WheelOfFortuneModal';
-import { PlusCircle, CheckCircle, Dices } from 'lucide-react';
+import { PlusCircle, CheckCircle, Dices, AlertTriangle, ExternalLink } from 'lucide-react';
 
 export default function App() {
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
   const [rounds, setRounds] = useState<CoffeeRound[]>([]);
   const [settings, setSettings] = useState<GroupSettings>(DEFAULT_SETTINGS);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
+  const [quotaExceeded, setQuotaExceeded] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'balances' | 'colleagues' | 'history'>('dashboard');
@@ -57,21 +58,37 @@ export default function App() {
     // Seed initial demo data if empty
     seedInitialDataIfEmpty();
 
+    const handleSubscriptionError = (err: unknown) => {
+      setIsSyncing(false);
+      const str = String(err);
+      if (
+        str.includes('resource-exhausted') ||
+        str.includes('Quota limit exceeded') ||
+        str.includes('Quota exceeded') ||
+        str.includes('quota')
+      ) {
+        setQuotaExceeded(true);
+      }
+    };
+
     // Subscribe to Colleagues
     const unsubscribeColleagues = subscribeColleagues((data) => {
       setColleagues(data);
       setIsSyncing(false);
-    });
+      setQuotaExceeded(false);
+    }, handleSubscriptionError);
 
     // Subscribe to Rounds
     const unsubscribeRounds = subscribeCoffeeRounds((data) => {
       setRounds(data);
-    });
+      setQuotaExceeded(false);
+    }, handleSubscriptionError);
 
     // Subscribe to Settings
     const unsubscribeSettings = subscribeSettings((data) => {
       setSettings(data);
-    });
+      setQuotaExceeded(false);
+    }, handleSubscriptionError);
 
     return () => {
       unsubscribeColleagues();
@@ -185,6 +202,39 @@ export default function App() {
 
       {/* Main Container */}
       <main className="max-w-xl mx-auto px-2.5 sm:px-4 pt-2.5 sm:pt-4 space-y-2.5 sm:space-y-4">
+        {/* Quota Exceeded Informative Banner */}
+        {quotaExceeded && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-100 rounded-xl text-amber-700 shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="space-y-1.5 flex-1 text-xs sm:text-sm">
+                <div className="font-bold text-slate-900 text-sm sm:text-base">
+                  Quota Firestore temporairement atteint pour aujourd'hui
+                </div>
+                <p className="text-slate-700 leading-relaxed">
+                  <strong className="text-emerald-700 font-semibold">Rassurez-vous : vos données ne sont pas perdues !</strong> Toutes vos tournées et collègues sont toujours bien enregistrés dans la base.
+                </p>
+                <p className="text-slate-600 text-xs leading-relaxed">
+                  Le plan gratuit Firebase limite les lectures quotidiennes (50 000 lectures/jour). Le quota se réinitialise automatiquement chaque jour à minuit (heure Pacifique / début de matinée). Dès la réinitialisation, l'intégralité de vos balances et tournées réapparaîtra automatiquement.
+                </p>
+                <div className="pt-1">
+                  <a
+                    href="https://console.firebase.google.com/project/concentrated-battery-f6shk/firestore/databases/ai-studio-coffeeround-d0e6adb4-35d6-473d-b3d9-7ecd6b8eeab7/data?openUpgradeDialog=true"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-semibold text-amber-800 hover:text-amber-950 underline text-xs"
+                  >
+                    <span>Consulter l'état de la base de données sur la console Firebase</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 1: DASHBOARD / TOURNÉES */}
         {activeTab === 'dashboard' && (
           <div className="space-y-2.5 sm:space-y-3.5">

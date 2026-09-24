@@ -47,47 +47,73 @@ const INITIAL_DEMO_COLLEAGUES: Omit<Colleague, 'id'>[] = USER_PRESET_DATA.map((i
 /**
  * Realtime listener for colleagues
  */
-export function subscribeColleagues(callback: (colleagues: Colleague[]) => void) {
+export function subscribeColleagues(
+  callback: (colleagues: Colleague[]) => void,
+  onError?: (error: unknown) => void
+) {
   const q = query(collection(db, COLLEAGUES_COLLECTION));
-  return onSnapshot(q, (snapshot) => {
-    const list: Colleague[] = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Colleague, 'id'>),
-    }));
-    callback(list);
-  }, (error) => {
-    console.error('Error listening to colleagues:', error);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: Colleague[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Colleague, 'id'>),
+      }));
+      callback(list);
+    },
+    (error) => {
+      console.error('Error listening to colleagues:', error);
+      if (onError) onError(error);
+    }
+  );
 }
 
 /**
  * Realtime listener for coffee rounds
  */
-export function subscribeCoffeeRounds(callback: (rounds: CoffeeRound[]) => void) {
+export function subscribeCoffeeRounds(
+  callback: (rounds: CoffeeRound[]) => void,
+  onError?: (error: unknown) => void
+) {
   const q = query(collection(db, ROUNDS_COLLECTION), orderBy('date', 'desc'));
-  return onSnapshot(q, (snapshot) => {
-    const list: CoffeeRound[] = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<CoffeeRound, 'id'>),
-    }));
-    callback(list);
-  }, (error) => {
-    console.error('Error listening to coffee rounds:', error);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CoffeeRound[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<CoffeeRound, 'id'>),
+      }));
+      callback(list);
+    },
+    (error) => {
+      console.error('Error listening to coffee rounds:', error);
+      if (onError) onError(error);
+    }
+  );
 }
 
 /**
  * Realtime listener for settings
  */
-export function subscribeSettings(callback: (settings: GroupSettings) => void) {
+export function subscribeSettings(
+  callback: (settings: GroupSettings) => void,
+  onError?: (error: unknown) => void
+) {
   const settingsRef = doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC);
-  return onSnapshot(settingsRef, (snapshot) => {
-    if (snapshot.exists()) {
-      callback(snapshot.data() as GroupSettings);
-    } else {
-      callback(DEFAULT_SETTINGS);
+  return onSnapshot(
+    settingsRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.data() as GroupSettings);
+      } else {
+        callback(DEFAULT_SETTINGS);
+      }
+    },
+    (error) => {
+      console.error('Error listening to settings:', error);
+      if (onError) onError(error);
     }
-  });
+  );
 }
 
 /**
@@ -96,17 +122,27 @@ export function subscribeSettings(callback: (settings: GroupSettings) => void) {
 export async function seedInitialDataIfEmpty() {
   try {
     const colleaguesSnap = await getDocs(collection(db, COLLEAGUES_COLLECTION));
-    const roundsSnap = await getDocs(collection(db, ROUNDS_COLLECTION));
-    const names = colleaguesSnap.docs.map((d) => d.data().name);
-    const isOldDemo = names.includes('Sophie') || names.includes('Thomas');
+    // If colleagues collection has documents, do NOT overwrite anything
+    if (!colleaguesSnap.empty) {
+      const names = colleaguesSnap.docs.map((d) => d.data().name);
+      const isOldDemo = names.includes('Sophie') || names.includes('Thomas');
+      if (isOldDemo) {
+        console.log('Replacing old demo template with user baseline data...');
+        await importBaseData(USER_PRESET_DATA, DEFAULT_SETTINGS.pricePerCup);
+        await setDoc(doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC), DEFAULT_SETTINGS, { merge: true });
+      }
+      return;
+    }
 
-    if (colleaguesSnap.empty || roundsSnap.empty || isOldDemo) {
-      console.log('Seeding user baseline data (Vincent +5, Samir +1, Fred +4, Sabrina +5, Invité -15)...');
+    // Only if completely empty:
+    const roundsSnap = await getDocs(collection(db, ROUNDS_COLLECTION));
+    if (colleaguesSnap.empty && roundsSnap.empty) {
+      console.log('Seeding initial baseline data...');
       await importBaseData(USER_PRESET_DATA, DEFAULT_SETTINGS.pricePerCup);
       await setDoc(doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC), DEFAULT_SETTINGS, { merge: true });
     }
   } catch (err) {
-    console.error('Error seeding data:', err);
+    console.warn('Could not check seed status (quota or network limitation):', err);
   }
 }
 
