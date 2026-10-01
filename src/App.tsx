@@ -24,9 +24,30 @@ import { WheelOfFortuneModal } from './components/WheelOfFortuneModal';
 import { PlusCircle, CheckCircle, Dices, AlertTriangle, ExternalLink } from 'lucide-react';
 
 export default function App() {
-  const [colleagues, setColleagues] = useState<Colleague[]>([]);
-  const [rounds, setRounds] = useState<CoffeeRound[]>([]);
-  const [settings, setSettings] = useState<GroupSettings>(DEFAULT_SETTINGS);
+  const [colleagues, setColleagues] = useState<Colleague[]>(() => {
+    try {
+      const saved = localStorage.getItem('coffeeround_colleagues_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [rounds, setRounds] = useState<CoffeeRound[]>(() => {
+    try {
+      const saved = localStorage.getItem('coffeeround_rounds_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [settings, setSettings] = useState<GroupSettings>(() => {
+    try {
+      const saved = localStorage.getItem('coffeeround_settings_backup');
+      return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  });
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
   const [quotaExceeded, setQuotaExceeded] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -55,9 +76,7 @@ export default function App() {
 
   // Initialize and subscribe
   useEffect(() => {
-    // Seed initial demo data if empty
-    seedInitialDataIfEmpty();
-
+    // Real-time subscriptions with cache
     const handleSubscriptionError = (err: unknown) => {
       setIsSyncing(false);
       const str = String(err);
@@ -73,20 +92,45 @@ export default function App() {
 
     // Subscribe to Colleagues
     const unsubscribeColleagues = subscribeColleagues((data) => {
-      setColleagues(data);
+      if (data && data.length > 0) {
+        try {
+          localStorage.setItem('coffeeround_colleagues_backup', JSON.stringify(data));
+        } catch {
+          // ignore
+        }
+        setColleagues(data);
+      } else {
+        setColleagues((prev) => (prev.length > 0 ? prev : data));
+      }
       setIsSyncing(false);
       setQuotaExceeded(false);
     }, handleSubscriptionError);
 
     // Subscribe to Rounds
     const unsubscribeRounds = subscribeCoffeeRounds((data) => {
-      setRounds(data);
+      if (data && data.length > 0) {
+        try {
+          localStorage.setItem('coffeeround_rounds_backup', JSON.stringify(data));
+        } catch {
+          // ignore
+        }
+        setRounds(data);
+      } else {
+        setRounds((prev) => (prev.length > 0 ? prev : data));
+      }
       setQuotaExceeded(false);
     }, handleSubscriptionError);
 
     // Subscribe to Settings
     const unsubscribeSettings = subscribeSettings((data) => {
-      setSettings(data);
+      if (data) {
+        try {
+          localStorage.setItem('coffeeround_settings_backup', JSON.stringify(data));
+        } catch {
+          // ignore
+        }
+        setSettings(data);
+      }
       setQuotaExceeded(false);
     }, handleSubscriptionError);
 

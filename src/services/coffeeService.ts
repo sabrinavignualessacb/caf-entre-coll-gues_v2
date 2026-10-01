@@ -10,6 +10,8 @@ import {
   orderBy,
   getDocs,
   deleteField,
+  limit,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Colleague, CoffeeRound, GroupSettings, ColleagueBalance } from '../types';
@@ -45,7 +47,7 @@ const INITIAL_DEMO_COLLEAGUES: Omit<Colleague, 'id'>[] = USER_PRESET_DATA.map((i
 }));
 
 /**
- * Realtime listener for colleagues
+ * Realtime listener for colleagues (optimized without metadata spam)
  */
 export function subscribeColleagues(
   callback: (colleagues: Colleague[]) => void,
@@ -69,13 +71,18 @@ export function subscribeColleagues(
 }
 
 /**
- * Realtime listener for coffee rounds
+ * Realtime listener for coffee rounds with strict limit(50) to prevent quota exhaustion
  */
 export function subscribeCoffeeRounds(
   callback: (rounds: CoffeeRound[]) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
+  maxRounds: number = 50
 ) {
-  const q = query(collection(db, ROUNDS_COLLECTION), orderBy('date', 'desc'));
+  const q = query(
+    collection(db, ROUNDS_COLLECTION),
+    orderBy('date', 'desc'),
+    limit(maxRounds)
+  );
   return onSnapshot(
     q,
     (snapshot) => {
@@ -93,7 +100,7 @@ export function subscribeCoffeeRounds(
 }
 
 /**
- * Realtime listener for settings
+ * Realtime listener for settings (optimized without metadata spam)
  */
 export function subscribeSettings(
   callback: (settings: GroupSettings) => void,
@@ -117,20 +124,13 @@ export function subscribeSettings(
 }
 
 /**
- * Initialize data if DB is empty or has old demo colleagues
+ * Initialize data only if DB is empty and explicitly requested
  */
 export async function seedInitialDataIfEmpty() {
   try {
     const colleaguesSnap = await getDocs(collection(db, COLLEAGUES_COLLECTION));
     // If colleagues collection has documents, do NOT overwrite anything
     if (!colleaguesSnap.empty) {
-      const names = colleaguesSnap.docs.map((d) => d.data().name);
-      const isOldDemo = names.includes('Sophie') || names.includes('Thomas');
-      if (isOldDemo) {
-        console.log('Replacing old demo template with user baseline data...');
-        await importBaseData(USER_PRESET_DATA, DEFAULT_SETTINGS.pricePerCup);
-        await setDoc(doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC), DEFAULT_SETTINGS, { merge: true });
-      }
       return;
     }
 
@@ -261,12 +261,21 @@ export async function saveGroupSettings(settings: GroupSettings) {
 }
 
 /**
- * Reset all coffee round history (resets all counters to zero)
+ * Reset all coffee round history (resets all counters to zero) using writeBatch
  */
 export async function resetAllRounds() {
   const snapshot = await getDocs(collection(db, ROUNDS_COLLECTION));
-  const deletePromises = snapshot.docs.map((d) => deleteDoc(d.ref));
-  await Promise.all(deletePromises);
+  if (snapshot.empty) return;
+
+  // Split into chunks of 400 (Firestore maximum batch size is 500)
+  const docs = snapshot.docs;
+  const chunkSize = 400;
+  for (let i = 0; i < docs.length; i += chunkSize) {
+    const chunk = docs.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    chunk.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
 }
 
 /**
