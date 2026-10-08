@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Sparkles, ArrowRight, UserX, ChevronDown, RotateCcw, Dices, RotateCw, Trophy, Users } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Coffee, Sparkles, ArrowRight, UserX, ChevronDown, RotateCcw, Dices, RotateCw, Trophy, Users, X, Check } from 'lucide-react';
 import { ColleagueBalance, GroupSettings, Colleague } from '../types';
 import { updateColleague, resetColleagueCounter } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
@@ -162,107 +163,262 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
     }
   };
 
-  return (
-    <div className={`${theme.spotlightBg} rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden flex flex-col items-center text-center border ${theme.spotlightBorder} transition-all duration-200`}>
-      {/* Decorative ambient background accents */}
-      <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+  // Close modal with ESC key
+  useEffect(() => {
+    if (!showOverridePicker) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowOverridePicker(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showOverridePicker]);
 
-      {/* Top Bar: Badge & Override Button */}
-      <div className="w-full flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5">
-          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${theme.spotlightBadgeBg} border ${theme.spotlightBadgeBorder} ${theme.spotlightBadgeText} text-[10px] sm:text-[11px] uppercase tracking-wider font-bold`}>
-            <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
-            <span>{isTie && !wheelWinner ? 'Égalité au tour' : 'Prochaine Tournée'}</span>
-          </span>
-
-          {isTie && !wheelWinner && (
-            <span className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
-              {tiedCandidates.length} à égalité ({minCups}☕)
-            </span>
-          )}
-        </div>
-
-        {/* Quick Override Button & Full Wheel Button */}
-        <div className="flex items-center gap-1 relative">
-          {onOpenFullWheel && (
-            <button
-              onClick={onOpenFullWheel}
-              className="text-[10px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 px-2 py-1 rounded-full flex items-center gap-1 transition-all font-semibold"
-              title="Ouvrir la roue avec tous les collègues"
-            >
-              <Dices className="w-3 h-3 text-amber-400" />
-              <span className="hidden xs:inline">Roue</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowOverridePicker(!showOverridePicker)}
-            className="text-[10px] text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 px-2.5 py-1 rounded-full flex items-center gap-1 transition-all font-medium"
-            title="Changer de payeur ou réinitialiser son solde"
+  const overrideModal =
+    showOverridePicker && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setShowOverridePicker(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="override-picker-title"
           >
-            <UserX className="w-3 h-3 text-amber-400" />
-            <span>Changer</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
+            <div
+              className="w-full max-w-sm sm:max-w-md bg-slate-900 border border-slate-700/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] text-white animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header with Title and Close Cross Button */}
+              <div className="px-4 py-3 sm:px-5 sm:py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                    <UserX className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 id="override-picker-title" className="font-bold text-sm sm:text-base text-white leading-tight">
+                      Changer de payeur
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-slate-400">
+                      Désigner manuellement qui paie ce tour
+                    </p>
+                  </div>
+                </div>
 
-          {/* Override Dropdown Picker */}
-          {showOverridePicker && (
-            <div className="absolute right-0 top-7 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-2.5 z-30 space-y-1.5 text-xs text-white text-left">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 pb-1 border-b border-slate-700 flex items-center justify-between">
-                <span>{activePayer.colleague.name} est absent(e) ?</span>
+                <button
+                  type="button"
+                  onClick={() => setShowOverridePicker(false)}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Fermer la fenêtre"
+                  title="Fermer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <button
-                onClick={() => handleMarkAbsent(activePayer.colleague.id, activePayer.colleague.name)}
-                className="w-full text-left px-2.5 py-1.5 bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px]"
-              >
-                <span>Mettre en congé 🏖️</span>
-                <UserX className="w-3 h-3" />
-              </button>
-
-              <button
-                onClick={() => handleResetSinglePayer(activePayer.colleague.id, activePayer.colleague.name, activePayer.netCupsBalance)}
-                disabled={isResetting}
-                className="w-full text-left px-2.5 py-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px]"
-              >
-                <span>Remettre à 0 🔄</span>
-                <RotateCcw className="w-3 h-3" />
-              </button>
-
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 pt-1 border-t border-slate-700">
-                Choisir directement :
-              </div>
-
-              <div className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5">
-                {sorted.map((b) => (
-                  <button
-                    key={b.colleague.id}
-                    onClick={() => {
-                      onSelectPayer(b.colleague.id);
-                      setShowOverridePicker(false);
-                    }}
-                    className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between transition-colors text-[11px] ${
-                      b.colleague.id === activePayer.colleague.id
-                        ? 'bg-white/20 text-white font-bold'
-                        : 'hover:bg-slate-700 text-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <UserAvatar avatar={b.colleague.avatar} name={b.colleague.name} sizeClassName="w-5 h-5 text-[10px]" />
-                      <span className="truncate">{b.colleague.name}</span>
-                    </div>
-                    <span className="text-[10px] text-slate-300 shrink-0 font-mono">
-                      {b.netCupsBalance > 0
-                        ? `+${b.netCupsBalance}`
-                        : `${b.netCupsBalance}`}☕
+              {/* Scrollable Body */}
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs">
+                {/* Active Payer Info & Quick Actions */}
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                      Payeur suggéré actuellement
                     </span>
-                  </button>
-                ))}
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+                      Actuel
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <UserAvatar
+                      avatar={activePayer.colleague.avatar}
+                      name={activePayer.colleague.name}
+                      sizeClassName="w-10 h-10 text-sm"
+                    />
+                    <div>
+                      <p className="font-bold text-sm text-white">{activePayer.colleague.name}</p>
+                      <p className="text-slate-400 text-xs">
+                        Solde :{' '}
+                        <span
+                          className={
+                            activePayer.netCupsBalance < 0
+                              ? 'text-rose-400 font-bold'
+                              : activePayer.netCupsBalance > 0
+                              ? 'text-emerald-400 font-bold'
+                              : 'text-slate-300 font-semibold'
+                          }
+                        >
+                          {activePayer.netCupsBalance > 0
+                            ? `+${activePayer.netCupsBalance}`
+                            : `${activePayer.netCupsBalance}`}{' '}
+                          café{Math.abs(activePayer.netCupsBalance) > 1 ? 's' : ''}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleMarkAbsent(activePayer.colleague.id, activePayer.colleague.name)}
+                      className="w-full text-left px-3 py-2 bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer"
+                      title={`Marquer ${activePayer.colleague.name} comme absent(e) ou en congé`}
+                    >
+                      <span>Mettre en congé 🏖️</span>
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleResetSinglePayer(
+                          activePayer.colleague.id,
+                          activePayer.colleague.name,
+                          activePayer.netCupsBalance
+                        )
+                      }
+                      disabled={isResetting}
+                      className="w-full text-left px-3 py-2 bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer disabled:opacity-50"
+                      title={`Remettre le compteur de ${activePayer.colleague.name} à zéro`}
+                    >
+                      <span>Remettre à 0 🔄</span>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Colleague selection list */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Choisir directement un collègue ({sorted.length})
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Du plus en retard au plus en avance
+                    </span>
+                  </div>
+
+                  {/* Scrollable list with good max height */}
+                  <div className="space-y-1.5 max-h-56 sm:max-h-64 overflow-y-auto pr-1">
+                    {sorted.map((b) => {
+                      const isCurrent = b.colleague.id === activePayer.colleague.id;
+                      return (
+                        <button
+                          key={b.colleague.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectPayer(b.colleague.id);
+                            setShowOverridePicker(false);
+                          }}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-xs border cursor-pointer ${
+                            isCurrent
+                              ? 'bg-amber-500/20 border-amber-500/50 text-white font-bold ring-1 ring-amber-500/40'
+                              : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 hover:border-slate-600 text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 truncate">
+                            <UserAvatar
+                              avatar={b.colleague.avatar}
+                              name={b.colleague.name}
+                              sizeClassName="w-7 h-7 text-xs"
+                            />
+                            <div className="truncate">
+                              <span className="truncate block font-semibold">{b.colleague.name}</span>
+                              {isCurrent && (
+                                <span className="text-[10px] text-amber-400 font-normal">
+                                  Actuellement sélectionné
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-md ${
+                                b.netCupsBalance < 0
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : b.netCupsBalance > 0
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-slate-700 text-slate-300'
+                              }`}
+                            >
+                              {b.netCupsBalance > 0 ? `+${b.netCupsBalance}` : b.netCupsBalance} ☕
+                            </span>
+                            {isCurrent ? (
+                              <Check className="w-4 h-4 text-amber-400" />
+                            ) : (
+                              <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer with Close Button */}
+              <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-900 border-t border-slate-800 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowOverridePicker(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Fermer
+                </button>
               </div>
             </div>
-          )}
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <>
+      <div className={`${theme.spotlightBg} rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden flex flex-col items-center text-center border ${theme.spotlightBorder} transition-all duration-200`}>
+        {/* Decorative ambient background accents */}
+        <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Top Bar: Badge & Override Button */}
+        <div className="w-full flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-1.5">
+            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${theme.spotlightBadgeBg} border ${theme.spotlightBadgeBorder} ${theme.spotlightBadgeText} text-[10px] sm:text-[11px] uppercase tracking-wider font-bold`}>
+              <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
+              <span>{isTie && !wheelWinner ? 'Égalité au tour' : 'Prochaine Tournée'}</span>
+            </span>
+
+            {isTie && !wheelWinner && (
+              <span className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
+                {tiedCandidates.length} à égalité ({minCups}☕)
+              </span>
+            )}
+          </div>
+
+          {/* Quick Override Button & Full Wheel Button */}
+          <div className="flex items-center gap-1 relative">
+            {onOpenFullWheel && (
+              <button
+                onClick={onOpenFullWheel}
+                className="text-[10px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 px-2 py-1 rounded-full flex items-center gap-1 transition-all font-semibold"
+                title="Ouvrir la roue avec tous les collègues"
+              >
+                <Dices className="w-3 h-3 text-amber-400" />
+                <span className="hidden xs:inline">Roue</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowOverridePicker(true)}
+              className="text-[10px] text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 px-2.5 py-1 rounded-full flex items-center gap-1 transition-all font-medium cursor-pointer"
+              title="Changer de payeur ou réinitialiser son solde"
+            >
+              <UserX className="w-3 h-3 text-amber-400" />
+              <span>Changer</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
         </div>
-      </div>
 
       {/* Main Centered Recommendation / Wheel Section */}
       {isTie && !wheelWinner ? (
@@ -445,6 +601,8 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
         </div>
       )}
     </div>
+    {overrideModal}
+  </>
   );
 };
 
