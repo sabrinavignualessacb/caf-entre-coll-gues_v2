@@ -70,33 +70,212 @@ export function subscribeColleagues(
   );
 }
 
+// Offline & Quota Persistence Keys
+const PENDING_ROUNDS_KEY = 'coffeeround_pending_rounds';
+const PENDING_DELETIONS_KEY = 'coffeeround_pending_deletions';
+const PENDING_UPDATES_KEY = 'coffeeround_pending_updates';
+const QUOTA_EXCEEDED_KEY = 'coffeeround_quota_exceeded';
+
 /**
- * Realtime listener for coffee rounds with strict limit(50) to prevent quota exhaustion
+ * Checks if an error is due to Firestore quota exhaustion
+ */
+export function isQuotaError(err: unknown): boolean {
+  if (!err) return false;
+  const str = String(err);
+  return (
+    str.includes('resource-exhausted') ||
+    str.includes('RESOURCE_EXHAUSTED') ||
+    str.includes('Quota limit exceeded') ||
+    str.includes('Quota exceeded') ||
+    str.includes('quota') ||
+    str.includes('Free daily write units') ||
+    str.includes('Free daily read units')
+  );
+}
+
+// Global Quota Exceeded state
+let quotaExceededState = false;
+try {
+  quotaExceededState = localStorage.getItem(QUOTA_EXCEEDED_KEY) === 'true';
+} catch {}
+
+const quotaListeners = new Set<(exceeded: boolean) => void>();
+
+export function setGlobalQuotaExceeded(exceeded: boolean) {
+  quotaExceededState = exceeded;
+  try {
+    localStorage.setItem(QUOTA_EXCEEDED_KEY, exceeded ? 'true' : 'false');
+  } catch {}
+  quotaListeners.forEach((fn) => fn(exceeded));
+}
+
+export function subscribeQuotaState(callback: (exceeded: boolean) => void) {
+  quotaListeners.add(callback);
+  callback(quotaExceededState);
+  return () => {
+    quotaListeners.delete(callback);
+  };
+}
+
+// Global Pending Rounds state
+const pendingListeners = new Set<(count: number) => void>();
+
+export function getPendingRounds(): CoffeeRound[] {
+  try {
+    const raw = localStorage.getItem(PENDING_ROUNDS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePendingRounds(rounds: CoffeeRound[]) {
+  try {
+    localStorage.setItem(PENDING_ROUNDS_KEY, JSON.stringify(rounds));
+  } catch {}
+  pendingListeners.forEach((fn) => fn(rounds.length));
+}
+
+export function getPendingDeletions(): string[] {
+  try {
+    const raw = localStorage.getItem(PENDING_DELETIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePendingDeletions(ids: string[]) {
+  try {
+    localStorage.setItem(PENDING_DELETIONS_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
+export function getPendingUpdates(): Record<string, Partial<CoffeeRound>> {
+  try {
+    const raw = localStorage.getItem(PENDING_UPDATES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePendingUpdates(updates: Record<string, Partial<CoffeeRound>>) {
+  try {
+    localStorage.setItem(PENDING_UPDATES_KEY, JSON.stringify(updates));
+  } catch {}
+}
+
+export function subscribePendingState(callback: (count: number) => void) {
+  pendingListeners.add(callback);
+  callback(getPendingRounds().length);
+  return () => {
+    pendingListeners.delete(callback);
+  };
+}
+
+// Memory cache for Firestore rounds + active UI subscribers
+let latestFirestoreRounds: CoffeeRound[] = [];
+const roundSubscribers = new Set<(rounds: CoffeeRound[]) => void>();
+
+export function getCombinedRounds(): CoffeeRound[] {
+  const pending = getPendingRounds();
+  const deletions = new Set(getPendingDeletions());
+  const updates = getPendingUpdates();
+
+  // 1. Filter out deleted rounds and apply local updates
+  const validFirestore = latestFirestoreRounds
+    .filter((r) => !deletions.has(r.id))
+    .map((r) => {
+      if (updates[r.id]) {
+        return { ...r, ...updates[r.id] };
+      }
+      return r;
+    });
+
+  // 2. Combine with pending local rounds (pending take precedence)
+  const combinedMap = new Map<string, CoffeeRound>();
+  pending.forEach((r) => combinedMap.set(r.id, r));
+  validFirestore.forEach((r) => {
+    if (!combinedMap.has(r.id)) {
+      combinedMap.set(r.id, r);
+    }
+  });
+
+  const list = Array.from(combinedMap.values());
+  // Sort date desc
+  list.sort((a, b) => {
+    const timeA = new Date(a.date).getTime() || 0;
+    const timeB = new Date(b.date).getTime() || 0;
+    return timeB - timeA;
+  });
+
+  return list;
+}
+
+export function notifyRoundSubscribers() {
+  const combined = getCombinedRounds();
+  try {
+    localStorage.setItem('coffeeround_rounds_backup', JSON.stringify(combined));
+  } catch {}
+  roundSubscribers.forEach((cb) => cb(combined));
+}
+
+/**
+ * Realtime listener for coffee rounds combining Firestore + Local pending rounds
  */
 export function subscribeCoffeeRounds(
   callback: (rounds: CoffeeRound[]) => void,
   onError?: (error: unknown) => void,
   maxRounds: number = 50
 ) {
+  roundSubscribers.add(callback);
+
+  // Send initial data immediately from cache/pending
+  const initial = getCombinedRounds();
+  if (initial.length > 0) {
+    callback(initial);
+  } else {
+    try {
+      const backupRaw = localStorage.getItem('coffeeround_rounds_backup');
+      if (backupRaw) {
+        const parsed = JSON.parse(backupRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          callback(parsed);
+        }
+      }
+    } catch {}
+  }
+
   const q = query(
     collection(db, ROUNDS_COLLECTION),
     orderBy('date', 'desc'),
     limit(maxRounds)
   );
-  return onSnapshot(
+
+  const unsub = onSnapshot(
     q,
     (snapshot) => {
-      const list: CoffeeRound[] = snapshot.docs.map((d) => ({
+      latestFirestoreRounds = snapshot.docs.map((d) => ({
         id: d.id,
         ...(d.data() as Omit<CoffeeRound, 'id'>),
       }));
-      callback(list);
+      notifyRoundSubscribers();
     },
     (error) => {
       console.error('Error listening to coffee rounds:', error);
+      if (isQuotaError(error)) {
+        setGlobalQuotaExceeded(true);
+      }
       if (onError) onError(error);
+      notifyRoundSubscribers();
     }
   );
+
+  return () => {
+    roundSubscribers.delete(callback);
+    unsub();
+  };
 }
 
 /**
@@ -177,7 +356,101 @@ export async function deleteColleague(id: string) {
 }
 
 /**
- * Record a coffee round
+ * Synchronize local pending rounds/updates/deletions with Firestore
+ */
+export async function syncPendingRounds(): Promise<{ synced: number; remaining: number; error?: string }> {
+  const pending = getPendingRounds();
+  const deletions = getPendingDeletions();
+  const updates = getPendingUpdates();
+
+  if (pending.length === 0 && deletions.length === 0 && Object.keys(updates).length === 0) {
+    return { synced: 0, remaining: 0 };
+  }
+
+  let syncedCount = 0;
+
+  // 1. Process deletions
+  const remainingDeletions: string[] = [];
+  for (const delId of deletions) {
+    try {
+      await deleteDoc(doc(db, ROUNDS_COLLECTION, delId));
+      syncedCount++;
+    } catch (e) {
+      if (isQuotaError(e)) {
+        setGlobalQuotaExceeded(true);
+        savePendingDeletions(deletions.slice(syncedCount));
+        notifyRoundSubscribers();
+        return { synced: syncedCount, remaining: pending.length + deletions.length, error: 'Quota toujours dépassé' };
+      }
+      remainingDeletions.push(delId);
+    }
+  }
+  savePendingDeletions(remainingDeletions);
+
+  // 2. Process updates
+  const remainingUpdates: Record<string, Partial<CoffeeRound>> = { ...updates };
+  for (const [upId, upData] of Object.entries(updates)) {
+    try {
+      const payload: Record<string, any> = { ...upData, updatedAt: new Date().toISOString() };
+      if (!payload.note) payload.note = deleteField();
+      await updateDoc(doc(db, ROUNDS_COLLECTION, upId), payload);
+      delete remainingUpdates[upId];
+      syncedCount++;
+    } catch (e) {
+      if (isQuotaError(e)) {
+        setGlobalQuotaExceeded(true);
+        savePendingUpdates(remainingUpdates);
+        notifyRoundSubscribers();
+        return { synced: syncedCount, remaining: pending.length + Object.keys(remainingUpdates).length, error: 'Quota toujours dépassé' };
+      }
+    }
+  }
+  savePendingUpdates(remainingUpdates);
+
+  // 3. Process new pending rounds
+  const remainingRounds: CoffeeRound[] = [];
+  for (let i = 0; i < pending.length; i++) {
+    const r = pending[i];
+    try {
+      const firestorePayload: Record<string, any> = {
+        payerId: r.payerId,
+        payerName: r.payerName,
+        cupsPaid: r.cupsPaid,
+        totalAmount: r.totalAmount,
+        beneficiaryIds: r.beneficiaryIds,
+        beneficiaryNames: r.beneficiaryNames,
+        date: r.date,
+        createdAt: r.createdAt || new Date().toISOString(),
+      };
+      if (r.note && r.note.trim()) {
+        firestorePayload.note = r.note.trim();
+      }
+      await addDoc(collection(db, ROUNDS_COLLECTION), firestorePayload);
+      syncedCount++;
+    } catch (e) {
+      if (isQuotaError(e)) {
+        setGlobalQuotaExceeded(true);
+        // Add this round and all subsequent ones back to pending
+        const allRemaining = [...remainingRounds, ...pending.slice(i)];
+        savePendingRounds(allRemaining);
+        notifyRoundSubscribers();
+        return { synced: syncedCount, remaining: allRemaining.length, error: 'Quota Firestore encore actif' };
+      }
+      remainingRounds.push(r);
+    }
+  }
+
+  savePendingRounds(remainingRounds);
+  if (remainingRounds.length === 0 && remainingDeletions.length === 0 && Object.keys(remainingUpdates).length === 0) {
+    setGlobalQuotaExceeded(false);
+  }
+  notifyRoundSubscribers();
+
+  return { synced: syncedCount, remaining: remainingRounds.length };
+}
+
+/**
+ * Record a coffee round (With automatic offline & quota resilience)
  */
 export async function recordCoffeeRound(roundData: {
   payerId: string;
@@ -188,27 +461,75 @@ export async function recordCoffeeRound(roundData: {
   beneficiaryNames: string[];
   date: string;
   note?: string;
-}) {
-  const newRound: Record<string, any> = {
+}): Promise<CoffeeRound> {
+  const safeDate = roundData.date || new Date().toISOString();
+  const createdAt = new Date().toISOString();
+
+  const firestorePayload: Record<string, any> = {
     payerId: roundData.payerId,
     payerName: roundData.payerName,
     cupsPaid: roundData.cupsPaid,
     totalAmount: roundData.totalAmount,
     beneficiaryIds: roundData.beneficiaryIds,
     beneficiaryNames: roundData.beneficiaryNames,
-    date: roundData.date || new Date().toISOString(),
-    createdAt: new Date().toISOString(),
+    date: safeDate,
+    createdAt,
   };
 
   if (roundData.note && roundData.note.trim()) {
-    newRound.note = roundData.note.trim();
+    firestorePayload.note = roundData.note.trim();
   }
 
-  return await addDoc(collection(db, ROUNDS_COLLECTION), newRound);
+  try {
+    const docRef = await addDoc(collection(db, ROUNDS_COLLECTION), firestorePayload);
+    // Write succeeded! Quota is available
+    setGlobalQuotaExceeded(false);
+    const created: CoffeeRound = {
+      id: docRef.id,
+      payerId: roundData.payerId,
+      payerName: roundData.payerName,
+      cupsPaid: roundData.cupsPaid,
+      totalAmount: roundData.totalAmount,
+      beneficiaryIds: roundData.beneficiaryIds,
+      beneficiaryNames: roundData.beneficiaryNames,
+      date: safeDate,
+      note: roundData.note?.trim(),
+      createdAt,
+      isLocalPending: false,
+    };
+    return created;
+  } catch (err) {
+    console.warn('Enregistrement Firestore impossible (quota ou hors-ligne), enregistrement local sécurisé:', err);
+    if (isQuotaError(err)) {
+      setGlobalQuotaExceeded(true);
+    }
+
+    const localId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const localRound: CoffeeRound = {
+      id: localId,
+      payerId: roundData.payerId,
+      payerName: roundData.payerName,
+      cupsPaid: roundData.cupsPaid,
+      totalAmount: roundData.totalAmount,
+      beneficiaryIds: roundData.beneficiaryIds,
+      beneficiaryNames: roundData.beneficiaryNames,
+      date: safeDate,
+      note: roundData.note?.trim(),
+      createdAt,
+      isLocalPending: true,
+    };
+
+    const pending = getPendingRounds();
+    pending.unshift(localRound);
+    savePendingRounds(pending);
+    notifyRoundSubscribers();
+
+    return localRound;
+  }
 }
 
 /**
- * Update an existing coffee round
+ * Update an existing coffee round (With automatic offline & quota resilience)
  */
 export async function updateCoffeeRound(
   id: string,
@@ -223,6 +544,28 @@ export async function updateCoffeeRound(
     note?: string;
   }
 ) {
+  // If it's a locally pending round, update it in local pending queue
+  if (id.startsWith('local_')) {
+    const pending = getPendingRounds();
+    const idx = pending.findIndex((r) => r.id === id);
+    if (idx !== -1) {
+      pending[idx] = {
+        ...pending[idx],
+        payerId: roundData.payerId,
+        payerName: roundData.payerName,
+        cupsPaid: roundData.cupsPaid,
+        totalAmount: roundData.totalAmount,
+        beneficiaryIds: roundData.beneficiaryIds,
+        beneficiaryNames: roundData.beneficiaryNames,
+        date: roundData.date || pending[idx].date,
+        note: roundData.note?.trim() || undefined,
+      };
+      savePendingRounds(pending);
+      notifyRoundSubscribers();
+      return;
+    }
+  }
+
   const ref = doc(db, ROUNDS_COLLECTION, id);
   const updatePayload: Record<string, any> = {
     payerId: roundData.payerId,
@@ -241,15 +584,58 @@ export async function updateCoffeeRound(
     updatePayload.note = deleteField();
   }
 
-  return await updateDoc(ref, updatePayload);
+  try {
+    await updateDoc(ref, updatePayload);
+  } catch (err) {
+    if (isQuotaError(err)) {
+      setGlobalQuotaExceeded(true);
+      const updates = getPendingUpdates();
+      updates[id] = {
+        payerId: roundData.payerId,
+        payerName: roundData.payerName,
+        cupsPaid: roundData.cupsPaid,
+        totalAmount: roundData.totalAmount,
+        beneficiaryIds: roundData.beneficiaryIds,
+        beneficiaryNames: roundData.beneficiaryNames,
+        date: roundData.date,
+        note: roundData.note?.trim(),
+      };
+      savePendingUpdates(updates);
+      notifyRoundSubscribers();
+      return;
+    }
+    throw err;
+  }
 }
 
 /**
- * Delete a coffee round
+ * Delete a coffee round (With automatic offline & quota resilience)
  */
 export async function deleteCoffeeRound(id: string) {
+  if (id.startsWith('local_')) {
+    const pending = getPendingRounds();
+    const filtered = pending.filter((r) => r.id !== id);
+    savePendingRounds(filtered);
+    notifyRoundSubscribers();
+    return;
+  }
+
   const ref = doc(db, ROUNDS_COLLECTION, id);
-  return await deleteDoc(ref);
+  try {
+    await deleteDoc(ref);
+  } catch (err) {
+    if (isQuotaError(err)) {
+      setGlobalQuotaExceeded(true);
+      const deletions = getPendingDeletions();
+      if (!deletions.includes(id)) {
+        deletions.push(id);
+        savePendingDeletions(deletions);
+      }
+      notifyRoundSubscribers();
+      return;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -294,7 +680,7 @@ export async function resetColleagueCounter(
   if (netCupsBalance < 0) {
     // Colleague owes cups -> add a balancing round where they pay the exact missing cups
     const cupsToPay = Math.abs(netCupsBalance);
-    await addDoc(collection(db, ROUNDS_COLLECTION), {
+    await recordCoffeeRound({
       payerId: colleagueId,
       payerName: colleagueName,
       cupsPaid: cupsToPay,
@@ -303,7 +689,6 @@ export async function resetColleagueCounter(
       beneficiaryNames: [colleagueName],
       date: new Date().toISOString(),
       note: 'Remise à zéro du solde (Ajustement)',
-      createdAt: new Date().toISOString(),
     });
   } else if (netCupsBalance > 0) {
     // Colleague has positive balance -> add a balancing consumption
@@ -312,7 +697,7 @@ export async function resetColleagueCounter(
     const beneIds = Array(count).fill(colleagueId);
     const beneNames = Array(count).fill(colleagueName);
 
-    await addDoc(collection(db, ROUNDS_COLLECTION), {
+    await recordCoffeeRound({
       payerId: colleagueId,
       payerName: colleagueName,
       cupsPaid: 0,
@@ -321,7 +706,6 @@ export async function resetColleagueCounter(
       beneficiaryNames: beneNames,
       date: new Date().toISOString(),
       note: 'Remise à zéro du solde (Ajustement)',
-      createdAt: new Date().toISOString(),
     });
   }
 }

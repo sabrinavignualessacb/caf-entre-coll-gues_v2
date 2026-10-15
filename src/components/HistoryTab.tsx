@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { CoffeeRound, GroupSettings } from '../types';
-import { deleteCoffeeRound } from '../services/coffeeService';
+import { deleteCoffeeRound, syncPendingRounds } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
 import { WeeklyCalendar } from './WeeklyCalendar';
-import { History, Trash2, Calendar, Users, FileText, Search, Pencil, Coffee, Filter, X } from 'lucide-react';
+import { History, Trash2, Calendar, Users, FileText, Search, Pencil, Coffee, Filter, X, CloudOff, RefreshCw } from 'lucide-react';
 
 interface HistoryTabProps {
   rounds: CoffeeRound[];
@@ -26,6 +26,27 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [internalSelectedDateStr, setInternalSelectedDateStr] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
+  const pendingCount = rounds.filter((r) => r.isLocalPending).length;
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus(null);
+    try {
+      const res = await syncPendingRounds();
+      if (res.remaining > 0) {
+        setSyncStatus(`Le quota gratuit Firestore d'aujourd'hui est encore actif. Vos tournées restent protégées sur votre appareil et seront synchronisées automatiquement.`);
+      } else {
+        setSyncStatus('Toutes vos tournées locales ont bien été synchronisées avec Firebase !');
+      }
+    } catch {
+      setSyncStatus('Synchronisation en attente (quota toujours actif).');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const selectedDateStr = externalSelectedDateStr !== undefined ? externalSelectedDateStr : internalSelectedDateStr;
   const setSelectedDateStr = externalOnSelectDateStr || setInternalSelectedDateStr;
@@ -157,6 +178,35 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
             />
           </div>
         )}
+
+        {/* Pending Local Rounds Sync Bar */}
+        {pendingCount > 0 && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs text-amber-950 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                <CloudOff className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{pendingCount} tournée{pendingCount > 1 ? 's' : ''} enregistrée{pendingCount > 1 ? 's' : ''} en local</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 disabled:opacity-50 text-[11px]"
+              >
+                <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Sync...' : 'Synchroniser'}</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-snug">
+              Vos tournées sont sécurisées sur votre appareil. Elles s'envoient automatiquement vers Firebase dès la réinitialisation quotidienne du quota (09h00 du matin).
+            </p>
+            {syncStatus && (
+              <p className="text-[11px] font-semibold text-amber-950 bg-amber-100 p-1.5 rounded-lg border border-amber-200">
+                {syncStatus}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Grouped Daily Rounds List */}
@@ -233,6 +283,15 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                                 <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                                   {round.cupsPaid} café{round.cupsPaid > 1 ? 's' : ''}
                                 </span>
+                                {round.isLocalPending && (
+                                  <span
+                                    className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300 flex items-center gap-1 shrink-0"
+                                    title="Tournée enregistrée sur votre appareil (en attente de synchronisation Firebase)"
+                                  >
+                                    <CloudOff className="w-2.5 h-2.5 text-amber-700" />
+                                    <span>Sur cet appareil</span>
+                                  </span>
+                                )}
                               </div>
                               {timeFormatted && (
                                 <div className="text-[10px] text-slate-400">

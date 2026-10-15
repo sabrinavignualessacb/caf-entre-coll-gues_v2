@@ -7,6 +7,9 @@ import {
   calculateBalances,
   updateColleague,
   DEFAULT_SETTINGS,
+  subscribeQuotaState,
+  subscribePendingState,
+  syncPendingRounds,
 } from './services/coffeeService';
 import { Colleague, CoffeeRound, GroupSettings, ColleagueBalance } from './types';
 import { getTheme } from './lib/themes';
@@ -21,7 +24,7 @@ import { AddRoundModal } from './components/AddRoundModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InitialBaseModal } from './components/InitialBaseModal';
 import { WheelOfFortuneModal } from './components/WheelOfFortuneModal';
-import { PlusCircle, CheckCircle, Dices, AlertTriangle, ExternalLink } from 'lucide-react';
+import { PlusCircle, CheckCircle, Dices, AlertTriangle, ExternalLink, RefreshCw, CloudOff } from 'lucide-react';
 
 export default function App() {
   const [colleagues, setColleagues] = useState<Colleague[]>(() => {
@@ -55,6 +58,28 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'balances' | 'colleagues' | 'history'>('dashboard');
   const [isWheelOpen, setIsWheelOpen] = useState<boolean>(false);
 
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
+  const [manualSyncMsg, setManualSyncMsg] = useState<string | null>(null);
+
+  const handleManualSyncAll = async () => {
+    setIsManualSyncing(true);
+    setManualSyncMsg(null);
+    try {
+      const res = await syncPendingRounds();
+      if (res.remaining > 0) {
+        setManualSyncMsg('Le quota Firebase d\'aujourd\'hui est encore actif. Vos tournées restent protégées sur cet appareil et seront synchronisées automatiquement dès demain matin.');
+      } else {
+        setManualSyncMsg('Toutes vos tournées locales ont bien été synchronisées avec Firebase !');
+        showToast('Synchronisation Firebase réussie !');
+      }
+    } catch {
+      setManualSyncMsg('Synchronisation en attente (quota Firebase toujours actif).');
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -76,6 +101,19 @@ export default function App() {
 
   // Initialize and subscribe
   useEffect(() => {
+    // Listen to Quota state
+    const unsubQuota = subscribeQuotaState((exceeded) => {
+      setQuotaExceeded(exceeded);
+    });
+
+    // Listen to Pending local rounds
+    const unsubPending = subscribePendingState((count) => {
+      setPendingCount(count);
+    });
+
+    // Attempt automatic sync in case quota reset
+    syncPendingRounds().catch(() => {});
+
     // Real-time subscriptions with cache
     const handleSubscriptionError = (err: unknown) => {
       setIsSyncing(false);
@@ -103,7 +141,6 @@ export default function App() {
         setColleagues((prev) => (prev.length > 0 ? prev : data));
       }
       setIsSyncing(false);
-      setQuotaExceeded(false);
     }, handleSubscriptionError);
 
     // Subscribe to Rounds
@@ -118,7 +155,6 @@ export default function App() {
       } else {
         setRounds((prev) => (prev.length > 0 ? prev : data));
       }
-      setQuotaExceeded(false);
     }, handleSubscriptionError);
 
     // Subscribe to Settings
@@ -131,10 +167,11 @@ export default function App() {
         }
         setSettings(data);
       }
-      setQuotaExceeded(false);
     }, handleSubscriptionError);
 
     return () => {
+      unsubQuota();
+      unsubPending();
       unsubscribeColleagues();
       unsubscribeRounds();
       unsubscribeSettings();
@@ -246,34 +283,58 @@ export default function App() {
 
       {/* Main Container */}
       <main className="max-w-xl mx-auto px-2.5 sm:px-4 pt-2.5 sm:pt-4 space-y-2.5 sm:space-y-4">
-        {/* Quota Exceeded Informative Banner */}
-        {quotaExceeded && (
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+        {/* Quota Exceeded / Local Offline Mode Banner */}
+        {(quotaExceeded || pendingCount > 0) && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 sm:p-4 text-amber-950 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300 space-y-2.5">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-100 rounded-xl text-amber-700 shrink-0 mt-0.5">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              <div className="p-2 bg-amber-200/80 rounded-xl text-amber-800 shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 text-amber-700" />
               </div>
               <div className="space-y-1.5 flex-1 text-xs sm:text-sm">
-                <div className="font-bold text-slate-900 text-sm sm:text-base">
-                  Quota Firestore temporairement atteint pour aujourd'hui
+                <div className="font-bold text-slate-900 text-sm sm:text-base flex items-center justify-between flex-wrap gap-1">
+                  <span>Quota Firebase gratuit atteint pour aujourd'hui</span>
+                  {pendingCount > 0 && (
+                    <span className="text-[11px] font-bold bg-amber-200/90 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                      {pendingCount} tournée{pendingCount > 1 ? 's' : ''} en attente de sync
+                    </span>
+                  )}
                 </div>
-                <p className="text-slate-700 leading-relaxed">
-                  <strong className="text-emerald-700 font-semibold">Rassurez-vous : vos données ne sont pas perdues !</strong> Toutes vos tournées et collègues sont toujours bien enregistrés dans la base.
+                <p className="text-slate-800 leading-relaxed text-xs sm:text-sm">
+                  <strong className="text-emerald-800 font-semibold">Vos tournées restent 100% enregistrées !</strong> L'application continue de fonctionner normalement en sauvegardant immédiatement vos tournées sur cet appareil.
                 </p>
                 <p className="text-slate-600 text-xs leading-relaxed">
-                  Le plan gratuit Firebase limite les lectures quotidiennes (50 000 lectures/jour). Le quota se réinitialise automatiquement chaque jour à minuit (heure Pacifique / début de matinée). Dès la réinitialisation, l'intégralité de vos balances et tournées réapparaîtra automatiquement.
+                  Le plan gratuit Firebase Spark limite les écritures quotidiennes. Le quota se réinitialise chaque jour à minuit heure Pacifique (<strong>09h00 du matin, heure de Paris</strong>). Dès la réinitialisation, vos tournées locales seront synchronisées automatiquement avec Firebase.
                 </p>
-                <div className="pt-1">
+
+                <div className="pt-1 flex items-center gap-2 flex-wrap">
+                  {pendingCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleManualSyncAll}
+                      disabled={isManualSyncing}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shadow-xs"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
+                      <span>{isManualSyncing ? 'Test de synchronisation...' : 'Tester la synchronisation'}</span>
+                    </button>
+                  )}
+
                   <a
                     href="https://console.firebase.google.com/project/concentrated-battery-f6shk/firestore/databases/ai-studio-coffeeround-d0e6adb4-35d6-473d-b3d9-7ecd6b8eeab7/data?openUpgradeDialog=true"
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 font-semibold text-amber-800 hover:text-amber-950 underline text-xs"
+                    className="inline-flex items-center gap-1 font-semibold text-amber-800 hover:text-amber-950 underline text-xs"
                   >
-                    <span>Consulter l'état de la base de données sur la console Firebase</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Console Firebase</span>
+                    <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
+
+                {manualSyncMsg && (
+                  <div className="p-2 bg-amber-100 rounded-xl text-xs font-semibold text-amber-900 border border-amber-200">
+                    {manualSyncMsg}
+                  </div>
+                )}
               </div>
             </div>
           </div>

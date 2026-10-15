@@ -174,13 +174,14 @@ export const AddRoundModal: React.FC<AddRoundModalProps> = ({
 
     if (!payerId || cupsPaid <= 0 || beneficiaryIds.length === 0) return;
 
+    let safeIsoDate = new Date().toISOString();
+    if (dateStr) {
+      // Use noon UTC to avoid timezone day shifts
+      safeIsoDate = `${dateStr}T12:00:00.000Z`;
+    }
+
     setIsSubmitting(true);
     try {
-      let safeIsoDate = new Date().toISOString();
-      if (dateStr) {
-        // Use noon UTC to avoid timezone day shifts
-        safeIsoDate = `${dateStr}T12:00:00.000Z`;
-      }
 
       const payload: {
         payerId: string;
@@ -211,15 +212,37 @@ export const AddRoundModal: React.FC<AddRoundModalProps> = ({
           onSuccess(`La tournée de ${payerColleague?.name || 'café'} a bien été modifiée !`);
         }
       } else {
-        await recordCoffeeRound(payload);
+        const saved = await recordCoffeeRound(payload);
         if (onSuccess) {
-          onSuccess(`La tournée de ${payerColleague?.name || 'café'} a bien été enregistrée !`);
+          if (saved?.isLocalPending) {
+            onSuccess(`☕ Tournée enregistrée avec succès sur votre appareil ! (En attente de synchronisation Firebase - quota du jour).`);
+          } else {
+            onSuccess(`La tournée de ${payerColleague?.name || 'café'} a bien été enregistrée !`);
+          }
         }
       }
       onClose();
     } catch (err) {
       console.error('Erreur enregistrement tournée:', err);
-      alert('Impossible d\'enregistrer la tournée. Réessayez.');
+      // Fallback save locally to never block the user
+      try {
+        await recordCoffeeRound({
+          payerId,
+          payerName: payerColleague?.name || 'Inconnu',
+          cupsPaid,
+          totalAmount: finalTotalAmount,
+          beneficiaryIds,
+          beneficiaryNames,
+          date: safeIsoDate,
+          note: note?.trim(),
+        });
+        if (onSuccess) {
+          onSuccess(`☕ Tournée enregistrée sur votre appareil (mode secours hors-ligne) !`);
+        }
+        onClose();
+      } catch {
+        alert('Impossible d\'enregistrer la tournée. Réessayez.');
+      }
     } finally {
       setIsSubmitting(false);
     }

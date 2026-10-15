@@ -22,6 +22,7 @@ export interface CoffeeRound {
   date: string;
   note?: string;
   createdAt: string;
+  isLocalPending?: boolean;
 }
 
 export type ThemeId = 'epure_slate' | 'warm_coffee' | 'indigo_minimal' | 'monochrome_clean' | 'nordic_blue';
