@@ -15,6 +15,7 @@ import {
   resetFirebaseMetrics,
   FirebaseMetrics,
 } from './services/coffeeService';
+import { isPersistentCacheConfigured } from './lib/firebase';
 import { Colleague, CoffeeRound, GroupSettings, ColleagueBalance } from './types';
 import { getTheme } from './lib/themes';
 import { Header } from './components/Header';
@@ -572,6 +573,17 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400 font-bold">✓</span>
                     <span><strong>Écouteurs Singletons :</strong> 3 canaux maximum (Collègues, Tournées, Paramètres) partagés par l'ensemble des composants.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={isPersistentCacheConfigured ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                      {isPersistentCacheConfigured ? "✓" : "⚠"}
+                    </span>
+                    <span>
+                      <strong>Cache persistant IndexedDB :</strong>{' '}
+                      {isPersistentCacheConfigured
+                        ? 'Actif (multi-onglets synchronisé)'
+                        : 'Repli en mémoire (IndexedDB inaccessible)'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400 font-bold">✓</span>

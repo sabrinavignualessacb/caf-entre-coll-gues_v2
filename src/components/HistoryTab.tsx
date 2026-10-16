@@ -35,7 +35,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
     setIsSyncing(true);
     setSyncStatus(null);
     try {
-      const res = await syncPendingRounds();
+      const res = await syncPendingRounds(true);
       if (res.remaining > 0) {
         setSyncStatus(`Le quota gratuit Firestore d'aujourd'hui est encore actif. Vos tournées restent protégées sur votre appareil et seront synchronisées automatiquement.`);
       } else {
