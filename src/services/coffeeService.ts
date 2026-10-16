@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   onSnapshot,
-  addDoc,
   updateDoc,
   deleteDoc,
   setDoc,
@@ -38,47 +37,106 @@ export const USER_PRESET_DATA = [
   { name: 'Invité', avatar: '☕', cupsPaid: 0, cupsConsumed: 15 },
 ];
 
-const INITIAL_DEMO_COLLEAGUES: Omit<Colleague, 'id'>[] = USER_PRESET_DATA.map((item) => ({
-  name: item.name,
-  avatar: item.avatar,
-  status: 'active',
-  color: 'bg-slate-800',
-  createdAt: new Date().toISOString(),
-}));
-
-/**
- * Realtime listener for colleagues (optimized without metadata spam)
- */
-export function subscribeColleagues(
-  callback: (colleagues: Colleague[]) => void,
-  onError?: (error: unknown) => void
-) {
-  const q = query(collection(db, COLLEAGUES_COLLECTION));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const list: Colleague[] = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Colleague, 'id'>),
-      }));
-      callback(list);
-    },
-    (error) => {
-      console.error('Error listening to colleagues:', error);
-      if (onError) onError(error);
-    }
-  );
-}
-
 // Offline & Quota Persistence Keys
 const PENDING_ROUNDS_KEY = 'coffeeround_pending_rounds';
 const PENDING_DELETIONS_KEY = 'coffeeround_pending_deletions';
 const PENDING_UPDATES_KEY = 'coffeeround_pending_updates';
 const QUOTA_EXCEEDED_KEY = 'coffeeround_quota_exceeded';
+const QUOTA_TIMESTAMP_KEY = 'coffeeround_quota_timestamp';
 
-/**
- * Checks if an error is due to Firestore quota exhaustion
- */
+// ============================================================================
+// 1. IN-MEMORY & CROSS-TAB DIAGNOSTIC INSTRUMENTATION
+// Note: Client-side event tracking only. This is NOT a server billing meter.
+// ============================================================================
+export interface FirebaseMetrics {
+  cachedDocsRendered: number;   // Documents rendered from local IndexedDB cache
+  liveUpdatesReceived: number;  // Real-time document updates/deltas received during session
+  writesSent: number;           // Write operations initiated by the user
+  deletesSent: number;          // Delete operations initiated by the user
+  activeListenersCount: number; // Number of active singleton subscription channels
+  listenerCreations: number;
+  listenerCleanups: number;
+  lastOperation: string;
+  sessionStartTime: number;
+}
+
+const metrics: FirebaseMetrics = {
+  cachedDocsRendered: 0,
+  liveUpdatesReceived: 0,
+  writesSent: 0,
+  deletesSent: 0,
+  activeListenersCount: 0,
+  listenerCreations: 0,
+  listenerCleanups: 0,
+  lastOperation: 'Initialisation',
+  sessionStartTime: Date.now(),
+};
+
+const metricsSubscribers = new Set<(m: FirebaseMetrics) => void>();
+
+// Cross-tab metrics sync via BroadcastChannel (Web standard)
+let metricsChannel: BroadcastChannel | null = null;
+try {
+  if (typeof BroadcastChannel !== 'undefined') {
+    metricsChannel = new BroadcastChannel('coffeeround_metrics_channel');
+    metricsChannel.onmessage = (event) => {
+      if (event.data && event.data.type === 'SYNC_METRICS') {
+        const remote = event.data.metrics as FirebaseMetrics;
+        // Merge counters
+        metrics.cachedDocsRendered = Math.max(metrics.cachedDocsRendered, remote.cachedDocsRendered);
+        metrics.liveUpdatesReceived = Math.max(metrics.liveUpdatesReceived, remote.liveUpdatesReceived);
+        metrics.writesSent = Math.max(metrics.writesSent, remote.writesSent);
+        metrics.deletesSent = Math.max(metrics.deletesSent, remote.deletesSent);
+        metrics.lastOperation = remote.lastOperation;
+        metricsSubscribers.forEach((cb) => {
+          try { cb({ ...metrics }); } catch {}
+        });
+      }
+    };
+  }
+} catch {}
+
+function notifyMetrics(operation: string) {
+  metrics.lastOperation = `${operation} (${new Date().toLocaleTimeString('fr-FR')})`;
+  metricsSubscribers.forEach((cb) => {
+    try {
+      cb({ ...metrics });
+    } catch {
+      // ignore subscriber error
+    }
+  });
+
+  if (metricsChannel) {
+    try {
+      metricsChannel.postMessage({ type: 'SYNC_METRICS', metrics: { ...metrics } });
+    } catch {}
+  }
+}
+
+export function getFirebaseMetrics(): FirebaseMetrics {
+  return { ...metrics };
+}
+
+export function subscribeFirebaseMetrics(callback: (m: FirebaseMetrics) => void): () => void {
+  metricsSubscribers.add(callback);
+  callback({ ...metrics });
+  return () => {
+    metricsSubscribers.delete(callback);
+  };
+}
+
+export function resetFirebaseMetrics() {
+  metrics.cachedDocsRendered = 0;
+  metrics.liveUpdatesReceived = 0;
+  metrics.writesSent = 0;
+  metrics.deletesSent = 0;
+  metrics.lastOperation = 'Réinitialisation métriques';
+  notifyMetrics('Compteurs remis à zéro');
+}
+
+// ============================================================================
+// 2. QUOTA DETECTION & STATE MANAGEMENT
+// ============================================================================
 export function isQuotaError(err: unknown): boolean {
   if (!err) return false;
   const str = String(err);
@@ -93,7 +151,6 @@ export function isQuotaError(err: unknown): boolean {
   );
 }
 
-// Global Quota Exceeded state
 let quotaExceededState = false;
 try {
   quotaExceededState = localStorage.getItem(QUOTA_EXCEEDED_KEY) === 'true';
@@ -105,6 +162,11 @@ export function setGlobalQuotaExceeded(exceeded: boolean) {
   quotaExceededState = exceeded;
   try {
     localStorage.setItem(QUOTA_EXCEEDED_KEY, exceeded ? 'true' : 'false');
+    if (exceeded) {
+      localStorage.setItem(QUOTA_TIMESTAMP_KEY, String(Date.now()));
+    } else {
+      localStorage.removeItem(QUOTA_TIMESTAMP_KEY);
+    }
   } catch {}
   quotaListeners.forEach((fn) => fn(exceeded));
 }
@@ -117,7 +179,9 @@ export function subscribeQuotaState(callback: (exceeded: boolean) => void) {
   };
 }
 
-// Global Pending Rounds state
+// ============================================================================
+// 3. OFFLINE & LOCAL PENDING QUEUES (Deduplicated)
+// ============================================================================
 const pendingListeners = new Set<(count: number) => void>();
 
 export function getPendingRounds(): CoffeeRound[] {
@@ -174,8 +238,13 @@ export function subscribePendingState(callback: (count: number) => void) {
   };
 }
 
-// Memory cache for Firestore rounds + active UI subscribers
+// Combined cache and subscribers
 let latestFirestoreRounds: CoffeeRound[] = [];
+try {
+  const saved = localStorage.getItem('coffeeround_rounds_backup');
+  if (saved) latestFirestoreRounds = JSON.parse(saved);
+} catch {}
+
 const roundSubscribers = new Set<(rounds: CoffeeRound[]) => void>();
 
 export function getCombinedRounds(): CoffeeRound[] {
@@ -221,144 +290,330 @@ export function notifyRoundSubscribers() {
   roundSubscribers.forEach((cb) => cb(combined));
 }
 
-/**
- * Realtime listener for coffee rounds combining Firestore + Local pending rounds
- */
+// ============================================================================
+// 4. SINGLETON LISTENER MANAGERS (Prevents duplicate onSnapshot subscriptions)
+// ============================================================================
+
+// --- Colleagues Singleton Listener ---
+let colleaguesUnsub: (() => void) | null = null;
+const colleaguesSubscribers = new Set<(colleagues: Colleague[]) => void>();
+let cachedColleagues: Colleague[] = [];
+try {
+  const saved = localStorage.getItem('coffeeround_colleagues_backup');
+  if (saved) cachedColleagues = JSON.parse(saved);
+} catch {}
+
+export function subscribeColleagues(
+  callback: (colleagues: Colleague[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  colleaguesSubscribers.add(callback);
+
+  // Deliver cached data synchronously
+  if (cachedColleagues.length > 0) {
+    callback(cachedColleagues);
+  }
+
+  // Only open ONE onSnapshot connection to Firestore for the entire app
+  if (colleaguesSubscribers.size === 1 && !colleaguesUnsub) {
+    metrics.listenerCreations++;
+    metrics.activeListenersCount++;
+    notifyMetrics('Écouteur Collègues connecté');
+
+    let initialCacheRead = true;
+    const q = query(collection(db, COLLEAGUES_COLLECTION));
+    colleaguesUnsub = onSnapshot(
+      q,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const isFromCache = snapshot.metadata.fromCache;
+        if (isFromCache) {
+          if (initialCacheRead) {
+            initialCacheRead = false;
+            metrics.cachedDocsRendered += snapshot.size;
+            notifyMetrics(`Cache local Collègues (${snapshot.size} docs)`);
+          }
+        } else {
+          const deltaCount = snapshot.docChanges().length;
+          if (deltaCount > 0) {
+            metrics.liveUpdatesReceived += deltaCount;
+            notifyMetrics(`Direct Collègues (+${deltaCount} màj)`);
+          } else {
+            notifyMetrics('Flux Collègues synchronisé');
+          }
+        }
+
+        cachedColleagues = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Colleague, 'id'>),
+        }));
+        try {
+          localStorage.setItem('coffeeround_colleagues_backup', JSON.stringify(cachedColleagues));
+        } catch {}
+        colleaguesSubscribers.forEach((cb) => cb(cachedColleagues));
+      },
+      (error) => {
+        console.error('Error listening to colleagues:', error);
+        if (isQuotaError(error)) {
+          setGlobalQuotaExceeded(true);
+        }
+        if (onError) onError(error);
+      }
+    );
+  }
+
+  return () => {
+    colleaguesSubscribers.delete(callback);
+    // Unsubscribe from Firestore only when ALL app components unmounted
+    if (colleaguesSubscribers.size === 0 && colleaguesUnsub) {
+      colleaguesUnsub();
+      colleaguesUnsub = null;
+      metrics.activeListenersCount = Math.max(0, metrics.activeListenersCount - 1);
+      metrics.listenerCleanups++;
+      notifyMetrics('Écouteur Collègues fermé');
+    }
+  };
+}
+
+// --- Coffee Rounds Singleton Listener ---
+let roundsUnsub: (() => void) | null = null;
+
 export function subscribeCoffeeRounds(
   callback: (rounds: CoffeeRound[]) => void,
   onError?: (error: unknown) => void,
   maxRounds: number = 50
-) {
+): () => void {
   roundSubscribers.add(callback);
 
-  // Send initial data immediately from cache/pending
+  // Deliver initial combined rounds synchronously
   const initial = getCombinedRounds();
   if (initial.length > 0) {
     callback(initial);
-  } else {
-    try {
-      const backupRaw = localStorage.getItem('coffeeround_rounds_backup');
-      if (backupRaw) {
-        const parsed = JSON.parse(backupRaw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          callback(parsed);
-        }
-      }
-    } catch {}
   }
 
-  const q = query(
-    collection(db, ROUNDS_COLLECTION),
-    orderBy('date', 'desc'),
-    limit(maxRounds)
-  );
+  // Only open ONE onSnapshot connection to Firestore for the entire app
+  if (roundSubscribers.size === 1 && !roundsUnsub) {
+    metrics.listenerCreations++;
+    metrics.activeListenersCount++;
+    notifyMetrics('Écouteur Tournées connecté');
 
-  const unsub = onSnapshot(
-    q,
-    (snapshot) => {
-      latestFirestoreRounds = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<CoffeeRound, 'id'>),
-      }));
-      notifyRoundSubscribers();
-    },
-    (error) => {
-      console.error('Error listening to coffee rounds:', error);
-      if (isQuotaError(error)) {
-        setGlobalQuotaExceeded(true);
+    let initialCacheRead = true;
+    const q = query(
+      collection(db, ROUNDS_COLLECTION),
+      orderBy('date', 'desc'),
+      limit(maxRounds)
+    );
+
+    roundsUnsub = onSnapshot(
+      q,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const isFromCache = snapshot.metadata.fromCache;
+        if (isFromCache) {
+          if (initialCacheRead) {
+            initialCacheRead = false;
+            metrics.cachedDocsRendered += snapshot.size;
+            notifyMetrics(`Cache local Tournées (${snapshot.size} docs)`);
+          }
+        } else {
+          const deltaCount = snapshot.docChanges().length;
+          if (deltaCount > 0) {
+            metrics.liveUpdatesReceived += deltaCount;
+            notifyMetrics(`Direct Tournées (+${deltaCount} màj)`);
+          } else {
+            notifyMetrics('Flux Tournées synchronisé');
+          }
+        }
+
+        latestFirestoreRounds = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<CoffeeRound, 'id'>),
+        }));
+        notifyRoundSubscribers();
+      },
+      (error) => {
+        console.error('Error listening to coffee rounds:', error);
+        if (isQuotaError(error)) {
+          setGlobalQuotaExceeded(true);
+        }
+        if (onError) onError(error);
+        notifyRoundSubscribers();
       }
-      if (onError) onError(error);
-      notifyRoundSubscribers();
-    }
-  );
+    );
+  }
 
   return () => {
     roundSubscribers.delete(callback);
-    unsub();
+    // Unsubscribe from Firestore only when ALL app components unmounted
+    if (roundSubscribers.size === 0 && roundsUnsub) {
+      roundsUnsub();
+      roundsUnsub = null;
+      metrics.activeListenersCount = Math.max(0, metrics.activeListenersCount - 1);
+      metrics.listenerCleanups++;
+      notifyMetrics('Écouteur Tournées fermé');
+    }
   };
 }
 
-/**
- * Realtime listener for settings (optimized without metadata spam)
- */
+// --- Settings Singleton Listener ---
+let settingsUnsub: (() => void) | null = null;
+const settingsSubscribers = new Set<(settings: GroupSettings) => void>();
+let cachedSettings: GroupSettings = DEFAULT_SETTINGS;
+try {
+  const saved = localStorage.getItem('coffeeround_settings_backup');
+  if (saved) cachedSettings = JSON.parse(saved);
+} catch {}
+
 export function subscribeSettings(
   callback: (settings: GroupSettings) => void,
   onError?: (error: unknown) => void
-) {
-  const settingsRef = doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC);
-  return onSnapshot(
-    settingsRef,
-    (snapshot) => {
-      if (snapshot.exists()) {
-        callback(snapshot.data() as GroupSettings);
-      } else {
-        callback(DEFAULT_SETTINGS);
+): () => void {
+  settingsSubscribers.add(callback);
+  callback(cachedSettings);
+
+  if (settingsSubscribers.size === 1 && !settingsUnsub) {
+    metrics.listenerCreations++;
+    metrics.activeListenersCount++;
+    notifyMetrics('Écouteur Paramètres connecté');
+
+    let initialCacheRead = true;
+    const settingsRef = doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC);
+    settingsUnsub = onSnapshot(
+      settingsRef,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const isFromCache = snapshot.metadata.fromCache;
+        if (isFromCache) {
+          if (initialCacheRead) {
+            initialCacheRead = false;
+            const count = snapshot.exists() ? 1 : 0;
+            metrics.cachedDocsRendered += count;
+            notifyMetrics(`Cache Paramètres (${count} doc)`);
+          }
+        } else {
+          metrics.liveUpdatesReceived += 1;
+          notifyMetrics('Direct Paramètres actualisé');
+        }
+
+        if (snapshot.exists()) {
+          cachedSettings = snapshot.data() as GroupSettings;
+        } else {
+          cachedSettings = DEFAULT_SETTINGS;
+        }
+        try {
+          localStorage.setItem('coffeeround_settings_backup', JSON.stringify(cachedSettings));
+        } catch {}
+        settingsSubscribers.forEach((cb) => cb(cachedSettings));
+      },
+      (error) => {
+        console.error('Error listening to settings:', error);
+        if (isQuotaError(error)) {
+          setGlobalQuotaExceeded(true);
+        }
+        if (onError) onError(error);
       }
-    },
-    (error) => {
-      console.error('Error listening to settings:', error);
-      if (onError) onError(error);
+    );
+  }
+
+  return () => {
+    settingsSubscribers.delete(callback);
+    if (settingsSubscribers.size === 0 && settingsUnsub) {
+      settingsUnsub();
+      settingsUnsub = null;
+      metrics.activeListenersCount = Math.max(0, metrics.activeListenersCount - 1);
+      metrics.listenerCleanups++;
+      notifyMetrics('Écouteur Paramètres fermé');
     }
-  );
+  };
 }
 
-/**
- * Initialize data only if DB is empty and explicitly requested
- */
+// ============================================================================
+// 5. SEEDING & BASE IMPORT (Protected against unwanted execution)
+// ============================================================================
 export async function seedInitialDataIfEmpty() {
   try {
-    const colleaguesSnap = await getDocs(collection(db, COLLEAGUES_COLLECTION));
-    // If colleagues collection has documents, do NOT overwrite anything
+    // If we already know colleagues exist in cache, abort immediately without any query
+    if (cachedColleagues.length > 0) {
+      return;
+    }
+
+    const colleaguesSnap = await getDocs(query(collection(db, COLLEAGUES_COLLECTION), limit(1)));
+    notifyMetrics(`Vérification collègues pour seed (${colleaguesSnap.size} doc)`);
+
     if (!colleaguesSnap.empty) {
       return;
     }
 
-    // Only if completely empty:
-    const roundsSnap = await getDocs(collection(db, ROUNDS_COLLECTION));
+    const roundsSnap = await getDocs(query(collection(db, ROUNDS_COLLECTION), limit(1)));
+    notifyMetrics(`Vérification tournées pour seed (${roundsSnap.size} doc)`);
+
     if (colleaguesSnap.empty && roundsSnap.empty) {
       console.log('Seeding initial baseline data...');
       await importBaseData(USER_PRESET_DATA, DEFAULT_SETTINGS.pricePerCup);
       await setDoc(doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC), DEFAULT_SETTINGS, { merge: true });
+      metrics.writesSent += 1;
     }
   } catch (err) {
     console.warn('Could not check seed status (quota or network limitation):', err);
   }
 }
 
-/**
- * Add a new colleague
- */
+// ============================================================================
+// 6. COLLEAGUE CRUD OPERATIONS (Tracked)
+// ============================================================================
 export async function addColleague(name: string, avatar: string = '☕', color: string = 'bg-indigo-500') {
-  const newColleague: Omit<Colleague, 'id'> = {
+  const newId = `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newColleague: Colleague = {
+    id: newId,
     name: name.trim(),
     avatar,
     status: 'active',
     color,
     createdAt: new Date().toISOString(),
   };
-  return await addDoc(collection(db, COLLEAGUES_COLLECTION), newColleague);
+
+  await setDoc(doc(db, COLLEAGUES_COLLECTION, newId), newColleague);
+  metrics.writesSent += 1;
+  notifyMetrics(`Ajout collègue (${name})`);
+  return newId;
 }
 
-/**
- * Update colleague details (status, avatar, name)
- */
 export async function updateColleague(id: string, updates: Partial<Colleague>) {
   const ref = doc(db, COLLEAGUES_COLLECTION, id);
-  return await updateDoc(ref, updates);
+  await updateDoc(ref, updates);
+  metrics.writesSent += 1;
+  notifyMetrics(`Mise à jour collègue (${id})`);
 }
 
-/**
- * Delete a colleague
- */
 export async function deleteColleague(id: string) {
   const ref = doc(db, COLLEAGUES_COLLECTION, id);
-  return await deleteDoc(ref);
+  await deleteDoc(ref);
+  metrics.deletesSent += 1;
+  notifyMetrics(`Suppression collègue (${id})`);
 }
 
-/**
- * Synchronize local pending rounds/updates/deletions with Firestore
- */
-export async function syncPendingRounds(): Promise<{ synced: number; remaining: number; error?: string }> {
+// ============================================================================
+// 7. SMART THROTTLED SYNC (Prevents retry loops when quota is exceeded)
+// ============================================================================
+let isSyncInProgress = false;
+
+export async function syncPendingRounds(isManual: boolean = false): Promise<{ synced: number; remaining: number; error?: string }> {
+  if (isSyncInProgress) {
+    return { synced: 0, remaining: getPendingRounds().length };
+  }
+
+  // Automatic sync throttle: If not manual, do NOT retry if quota was marked exceeded within the last 4 hours
+  if (!isManual && quotaExceededState) {
+    const lastTimestamp = localStorage.getItem(QUOTA_TIMESTAMP_KEY);
+    if (lastTimestamp) {
+      const elapsed = Date.now() - Number(lastTimestamp);
+      // Wait at least 4 hours before auto-trying again in background
+      if (elapsed < 4 * 3600 * 1000) {
+        return { synced: 0, remaining: getPendingRounds().length, error: 'Attente réinitialisation quota' };
+      }
+    }
+  }
+
   const pending = getPendingRounds();
   const deletions = getPendingDeletions();
   const updates = getPendingUpdates();
@@ -367,92 +622,113 @@ export async function syncPendingRounds(): Promise<{ synced: number; remaining: 
     return { synced: 0, remaining: 0 };
   }
 
+  isSyncInProgress = true;
   let syncedCount = 0;
 
-  // 1. Process deletions
-  const remainingDeletions: string[] = [];
-  for (const delId of deletions) {
-    try {
-      await deleteDoc(doc(db, ROUNDS_COLLECTION, delId));
-      syncedCount++;
-    } catch (e) {
-      if (isQuotaError(e)) {
-        setGlobalQuotaExceeded(true);
-        savePendingDeletions(deletions.slice(syncedCount));
-        notifyRoundSubscribers();
-        return { synced: syncedCount, remaining: pending.length + deletions.length, error: 'Quota toujours dépassé' };
-      }
-      remainingDeletions.push(delId);
-    }
-  }
-  savePendingDeletions(remainingDeletions);
-
-  // 2. Process updates
-  const remainingUpdates: Record<string, Partial<CoffeeRound>> = { ...updates };
-  for (const [upId, upData] of Object.entries(updates)) {
-    try {
-      const payload: Record<string, any> = { ...upData, updatedAt: new Date().toISOString() };
-      if (!payload.note) payload.note = deleteField();
-      await updateDoc(doc(db, ROUNDS_COLLECTION, upId), payload);
-      delete remainingUpdates[upId];
-      syncedCount++;
-    } catch (e) {
-      if (isQuotaError(e)) {
-        setGlobalQuotaExceeded(true);
-        savePendingUpdates(remainingUpdates);
-        notifyRoundSubscribers();
-        return { synced: syncedCount, remaining: pending.length + Object.keys(remainingUpdates).length, error: 'Quota toujours dépassé' };
+  try {
+    // 1. Process deletions
+    const remainingDeletions: string[] = [];
+    for (const delId of deletions) {
+      try {
+        await deleteDoc(doc(db, ROUNDS_COLLECTION, delId));
+        metrics.deletesSent += 1;
+        notifyMetrics(`Suppression tournée distante (${delId})`);
+        syncedCount++;
+      } catch (e) {
+        if (isQuotaError(e)) {
+          setGlobalQuotaExceeded(true);
+          savePendingDeletions(deletions.slice(syncedCount));
+          notifyRoundSubscribers();
+          return { synced: syncedCount, remaining: pending.length + deletions.length, error: 'Quota toujours actif' };
+        }
+        remainingDeletions.push(delId);
       }
     }
-  }
-  savePendingUpdates(remainingUpdates);
+    savePendingDeletions(remainingDeletions);
 
-  // 3. Process new pending rounds
-  const remainingRounds: CoffeeRound[] = [];
-  for (let i = 0; i < pending.length; i++) {
-    const r = pending[i];
-    try {
-      const firestorePayload: Record<string, any> = {
-        payerId: r.payerId,
-        payerName: r.payerName,
-        cupsPaid: r.cupsPaid,
-        totalAmount: r.totalAmount,
-        beneficiaryIds: r.beneficiaryIds,
-        beneficiaryNames: r.beneficiaryNames,
-        date: r.date,
-        createdAt: r.createdAt || new Date().toISOString(),
-      };
-      if (r.note && r.note.trim()) {
-        firestorePayload.note = r.note.trim();
+    // 2. Process updates
+    const remainingUpdates: Record<string, Partial<CoffeeRound>> = { ...updates };
+    for (const [upId, upData] of Object.entries(updates)) {
+      try {
+        const payload: Record<string, any> = { ...upData, updatedAt: new Date().toISOString() };
+        if (!payload.note) payload.note = deleteField();
+        await updateDoc(doc(db, ROUNDS_COLLECTION, upId), payload);
+        metrics.writesSent += 1;
+        notifyMetrics(`Mise à jour tournée distante (${upId})`);
+        delete remainingUpdates[upId];
+        syncedCount++;
+      } catch (e) {
+        if (isQuotaError(e)) {
+          setGlobalQuotaExceeded(true);
+          savePendingUpdates(remainingUpdates);
+          notifyRoundSubscribers();
+          return { synced: syncedCount, remaining: pending.length + Object.keys(remainingUpdates).length, error: 'Quota toujours actif' };
+        }
       }
-      await addDoc(collection(db, ROUNDS_COLLECTION), firestorePayload);
-      syncedCount++;
-    } catch (e) {
-      if (isQuotaError(e)) {
-        setGlobalQuotaExceeded(true);
-        // Add this round and all subsequent ones back to pending
-        const allRemaining = [...remainingRounds, ...pending.slice(i)];
-        savePendingRounds(allRemaining);
-        notifyRoundSubscribers();
-        return { synced: syncedCount, remaining: allRemaining.length, error: 'Quota Firestore encore actif' };
-      }
-      remainingRounds.push(r);
     }
-  }
+    savePendingUpdates(remainingUpdates);
 
-  savePendingRounds(remainingRounds);
-  if (remainingRounds.length === 0 && remainingDeletions.length === 0 && Object.keys(remainingUpdates).length === 0) {
-    setGlobalQuotaExceeded(false);
-  }
-  notifyRoundSubscribers();
+    // 3. Process new pending rounds
+    const remainingRounds: CoffeeRound[] = [];
+    for (let i = 0; i < pending.length; i++) {
+      const r = pending[i];
 
-  return { synced: syncedCount, remaining: remainingRounds.length };
+      // If document already exists in latestFirestoreRounds, skip write to avoid duplicate billing!
+      const alreadyInFirestore = latestFirestoreRounds.some((f) => f.id === r.id);
+      if (alreadyInFirestore) {
+        syncedCount++;
+        continue;
+      }
+
+      try {
+        const firestorePayload: Record<string, any> = {
+          payerId: r.payerId,
+          payerName: r.payerName,
+          cupsPaid: r.cupsPaid,
+          totalAmount: r.totalAmount,
+          beneficiaryIds: r.beneficiaryIds,
+          beneficiaryNames: r.beneficiaryNames,
+          date: r.date,
+          createdAt: r.createdAt || new Date().toISOString(),
+        };
+        if (r.note && r.note.trim()) {
+          firestorePayload.note = r.note.trim();
+        }
+
+        // Idempotent write: setDoc using round.id
+        await setDoc(doc(db, ROUNDS_COLLECTION, r.id), firestorePayload, { merge: true });
+        metrics.writesSent += 1;
+        notifyMetrics(`Synchronisation tournée (${r.id})`);
+        syncedCount++;
+      } catch (e) {
+        if (isQuotaError(e)) {
+          setGlobalQuotaExceeded(true);
+          const allRemaining = [...remainingRounds, ...pending.slice(i)];
+          savePendingRounds(allRemaining);
+          notifyRoundSubscribers();
+          return { synced: syncedCount, remaining: allRemaining.length, error: 'Quota Firestore encore actif' };
+        }
+        remainingRounds.push(r);
+      }
+    }
+
+    savePendingRounds(remainingRounds);
+    if (remainingRounds.length === 0 && remainingDeletions.length === 0 && Object.keys(remainingUpdates).length === 0) {
+      setGlobalQuotaExceeded(false);
+    }
+    notifyRoundSubscribers();
+
+    return { synced: syncedCount, remaining: remainingRounds.length };
+  } finally {
+    isSyncInProgress = false;
+  }
 }
 
-/**
- * Record a coffee round (With automatic offline & quota resilience)
- */
+// ============================================================================
+// 8. IDEMPOTENT RECORD COFFEE ROUND
+// ============================================================================
 export async function recordCoffeeRound(roundData: {
+  id?: string;
   payerId: string;
   payerName: string;
   cupsPaid: number;
@@ -464,6 +740,8 @@ export async function recordCoffeeRound(roundData: {
 }): Promise<CoffeeRound> {
   const safeDate = roundData.date || new Date().toISOString();
   const createdAt = new Date().toISOString();
+  // Generate deterministic ID upfront to guarantee idempotency and avoid duplicates on retry
+  const targetId = roundData.id || `round_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   const firestorePayload: Record<string, any> = {
     payerId: roundData.payerId,
@@ -481,11 +759,14 @@ export async function recordCoffeeRound(roundData: {
   }
 
   try {
-    const docRef = await addDoc(collection(db, ROUNDS_COLLECTION), firestorePayload);
-    // Write succeeded! Quota is available
+    // setDoc with targetId is idempotent: never creates duplicates if retried
+    await setDoc(doc(db, ROUNDS_COLLECTION, targetId), firestorePayload, { merge: true });
+    metrics.writesSent += 1;
+    notifyMetrics(`Enregistrement tournée (${targetId})`);
+
     setGlobalQuotaExceeded(false);
     const created: CoffeeRound = {
-      id: docRef.id,
+      id: targetId,
       payerId: roundData.payerId,
       payerName: roundData.payerName,
       cupsPaid: roundData.cupsPaid,
@@ -497,16 +778,25 @@ export async function recordCoffeeRound(roundData: {
       createdAt,
       isLocalPending: false,
     };
+
+    // Update memory cache immediately
+    const existingIdx = latestFirestoreRounds.findIndex((r) => r.id === targetId);
+    if (existingIdx !== -1) {
+      latestFirestoreRounds[existingIdx] = created;
+    } else {
+      latestFirestoreRounds.unshift(created);
+    }
+    notifyRoundSubscribers();
+
     return created;
   } catch (err) {
-    console.warn('Enregistrement Firestore impossible (quota ou hors-ligne), enregistrement local sécurisé:', err);
+    console.warn('Enregistrement Firestore différé (quota ou hors-ligne), sauvegarde locale sécurisée:', err);
     if (isQuotaError(err)) {
       setGlobalQuotaExceeded(true);
     }
 
-    const localId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const localRound: CoffeeRound = {
-      id: localId,
+      id: targetId,
       payerId: roundData.payerId,
       payerName: roundData.payerName,
       cupsPaid: roundData.cupsPaid,
@@ -520,7 +810,12 @@ export async function recordCoffeeRound(roundData: {
     };
 
     const pending = getPendingRounds();
-    pending.unshift(localRound);
+    const existingIndex = pending.findIndex((r) => r.id === targetId);
+    if (existingIndex !== -1) {
+      pending[existingIndex] = localRound;
+    } else {
+      pending.unshift(localRound);
+    }
     savePendingRounds(pending);
     notifyRoundSubscribers();
 
@@ -528,9 +823,9 @@ export async function recordCoffeeRound(roundData: {
   }
 }
 
-/**
- * Update an existing coffee round (With automatic offline & quota resilience)
- */
+// ============================================================================
+// 9. UPDATE & DELETE COFFEE ROUND
+// ============================================================================
 export async function updateCoffeeRound(
   id: string,
   roundData: {
@@ -544,26 +839,24 @@ export async function updateCoffeeRound(
     note?: string;
   }
 ) {
-  // If it's a locally pending round, update it in local pending queue
-  if (id.startsWith('local_')) {
-    const pending = getPendingRounds();
-    const idx = pending.findIndex((r) => r.id === id);
-    if (idx !== -1) {
-      pending[idx] = {
-        ...pending[idx],
-        payerId: roundData.payerId,
-        payerName: roundData.payerName,
-        cupsPaid: roundData.cupsPaid,
-        totalAmount: roundData.totalAmount,
-        beneficiaryIds: roundData.beneficiaryIds,
-        beneficiaryNames: roundData.beneficiaryNames,
-        date: roundData.date || pending[idx].date,
-        note: roundData.note?.trim() || undefined,
-      };
-      savePendingRounds(pending);
-      notifyRoundSubscribers();
-      return;
-    }
+  // If it's a locally pending round, update it in local pending queue directly (zero Firestore cost)
+  const pending = getPendingRounds();
+  const idx = pending.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    pending[idx] = {
+      ...pending[idx],
+      payerId: roundData.payerId,
+      payerName: roundData.payerName,
+      cupsPaid: roundData.cupsPaid,
+      totalAmount: roundData.totalAmount,
+      beneficiaryIds: roundData.beneficiaryIds,
+      beneficiaryNames: roundData.beneficiaryNames,
+      date: roundData.date || pending[idx].date,
+      note: roundData.note?.trim() || undefined,
+    };
+    savePendingRounds(pending);
+    notifyRoundSubscribers();
+    return;
   }
 
   const ref = doc(db, ROUNDS_COLLECTION, id);
@@ -586,6 +879,8 @@ export async function updateCoffeeRound(
 
   try {
     await updateDoc(ref, updatePayload);
+    metrics.writesSent += 1;
+    notifyMetrics(`Modification tournée (${id})`);
   } catch (err) {
     if (isQuotaError(err)) {
       setGlobalQuotaExceeded(true);
@@ -608,13 +903,11 @@ export async function updateCoffeeRound(
   }
 }
 
-/**
- * Delete a coffee round (With automatic offline & quota resilience)
- */
 export async function deleteCoffeeRound(id: string) {
-  if (id.startsWith('local_')) {
-    const pending = getPendingRounds();
-    const filtered = pending.filter((r) => r.id !== id);
+  // If it's a locally pending round, remove it from local queue directly (zero Firestore cost)
+  const pending = getPendingRounds();
+  const filtered = pending.filter((r) => r.id !== id);
+  if (filtered.length !== pending.length) {
     savePendingRounds(filtered);
     notifyRoundSubscribers();
     return;
@@ -623,6 +916,8 @@ export async function deleteCoffeeRound(id: string) {
   const ref = doc(db, ROUNDS_COLLECTION, id);
   try {
     await deleteDoc(ref);
+    metrics.deletesSent += 1;
+    notifyMetrics(`Suppression tournée (${id})`);
   } catch (err) {
     if (isQuotaError(err)) {
       setGlobalQuotaExceeded(true);
@@ -638,22 +933,21 @@ export async function deleteCoffeeRound(id: string) {
   }
 }
 
-/**
- * Save Group Settings
- */
+// ============================================================================
+// 10. SETTINGS, COUNTER RESET & IMPORT
+// ============================================================================
 export async function saveGroupSettings(settings: GroupSettings) {
   const settingsRef = doc(db, SETTINGS_COLLECTION, DEFAULT_SETTINGS_DOC);
-  return await setDoc(settingsRef, settings, { merge: true });
+  await setDoc(settingsRef, settings, { merge: true });
+  metrics.writesSent += 1;
+  notifyMetrics('Enregistrement réglages');
 }
 
-/**
- * Reset all coffee round history (resets all counters to zero) using writeBatch
- */
 export async function resetAllRounds() {
   const snapshot = await getDocs(collection(db, ROUNDS_COLLECTION));
+  notifyMetrics(`Lecture pour purge (${snapshot.size} docs)`);
   if (snapshot.empty) return;
 
-  // Split into chunks of 400 (Firestore maximum batch size is 500)
   const docs = snapshot.docs;
   const chunkSize = 400;
   for (let i = 0; i < docs.length; i += chunkSize) {
@@ -661,14 +955,11 @@ export async function resetAllRounds() {
     const batch = writeBatch(db);
     chunk.forEach((d) => batch.delete(d.ref));
     await batch.commit();
+    metrics.deletesSent += chunk.length;
   }
+  notifyMetrics(`Remise à zéro de l'historique (${docs.length} supprimés)`);
 }
 
-/**
- * Reset a single colleague's counter to 0
- * Option 1: Adjust balance via a balancing adjustment round
- * Option 2: Remove rounds where colleague is sole participant or clean rounds
- */
 export async function resetColleagueCounter(
   colleagueId: string,
   colleagueName: string,
@@ -678,7 +969,6 @@ export async function resetColleagueCounter(
   if (Math.abs(netCupsBalance) < 0.05) return;
 
   if (netCupsBalance < 0) {
-    // Colleague owes cups -> add a balancing round where they pay the exact missing cups
     const cupsToPay = Math.abs(netCupsBalance);
     await recordCoffeeRound({
       payerId: colleagueId,
@@ -691,7 +981,6 @@ export async function resetColleagueCounter(
       note: 'Remise à zéro du solde (Ajustement)',
     });
   } else if (netCupsBalance > 0) {
-    // Colleague has positive balance -> add a balancing consumption
     const excessCups = Math.abs(netCupsBalance);
     const count = Math.max(1, Math.round(excessCups));
     const beneIds = Array(count).fill(colleagueId);
@@ -710,24 +999,20 @@ export async function resetColleagueCounter(
   }
 }
 
-/**
- * Bulk import or initial setup from user base
- */
 export async function importBaseData(
   colleaguesData: { name: string; avatar?: string; cupsPaid: number; cupsConsumed: number }[],
   pricePerCup: number = 1.20
 ) {
-  // Fetch existing colleagues
   const existingColleaguesSnap = await getDocs(collection(db, COLLEAGUES_COLLECTION));
+  notifyMetrics(`Lecture collègues pour import (${existingColleaguesSnap.size} docs)`);
+
   const existingColleagues = existingColleaguesSnap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as Omit<Colleague, 'id'>),
   }));
 
-  // Clear existing rounds
   await resetAllRounds();
 
-  // Create or update colleagues map
   const colleagueMap: Record<string, { id: string; name: string; avatar: string }> = {};
 
   for (const item of colleaguesData) {
@@ -739,16 +1024,19 @@ export async function importBaseData(
     let colleagueId = colleague?.id;
 
     if (!colleagueId) {
-      const newRef = await addDoc(collection(db, COLLEAGUES_COLLECTION), {
+      const generatedId = `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      await setDoc(doc(db, COLLEAGUES_COLLECTION, generatedId), {
         name: item.name.trim(),
         avatar: item.avatar || '☕',
         status: 'active',
         createdAt: new Date().toISOString(),
       });
-      colleagueId = newRef.id;
+      metrics.writesSent += 1;
+      colleagueId = generatedId;
     } else {
       if (item.avatar) {
         await updateDoc(doc(db, COLLEAGUES_COLLECTION, colleagueId), { avatar: item.avatar });
+        metrics.writesSent += 1;
       }
     }
 
@@ -759,15 +1047,14 @@ export async function importBaseData(
     };
   }
 
-  // Remove old colleagues that are not in the new dataset
   const validNames = colleaguesData.map((c) => c.name.trim().toLowerCase());
   for (const ex of existingColleagues) {
     if (!validNames.includes(ex.name.toLowerCase())) {
       await deleteDoc(doc(db, COLLEAGUES_COLLECTION, ex.id));
+      metrics.deletesSent += 1;
     }
   }
 
-  // Build consumer pool (queue of colleague IDs that consumed cups)
   const consumerPool: { id: string; name: string }[] = [];
   colleaguesData.forEach((c) => {
     const colInfo = colleagueMap[c.name.trim().toLowerCase()];
@@ -778,24 +1065,22 @@ export async function importBaseData(
     }
   });
 
-  // For each colleague with cupsPaid > 0, create baseline rounds pulling from consumer pool
   for (const item of colleaguesData) {
     const colInfo = colleagueMap[item.name.trim().toLowerCase()];
     if (!colInfo || item.cupsPaid <= 0) continue;
 
     const paidCount = item.cupsPaid;
-    // Pull up to paidCount beneficiaries from consumer pool
     const pulledBeneficiaries = consumerPool.splice(0, paidCount);
 
-    // If consumer pool didn't have enough, fill remaining with self
     while (pulledBeneficiaries.length < paidCount) {
       pulledBeneficiaries.push({ id: colInfo.id, name: colInfo.name });
     }
 
     const beneIds = pulledBeneficiaries.map((b) => b.id);
     const beneNames = pulledBeneficiaries.map((b) => b.name);
+    const roundId = `init_${colInfo.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-    await addDoc(collection(db, ROUNDS_COLLECTION), {
+    await setDoc(doc(db, ROUNDS_COLLECTION, roundId), {
       payerId: colInfo.id,
       payerName: colInfo.name,
       cupsPaid: paidCount,
@@ -806,15 +1091,16 @@ export async function importBaseData(
       note: 'Saisie initiale (Solde de départ)',
       createdAt: new Date().toISOString(),
     });
+    metrics.writesSent += 1;
   }
 
-  // If there are leftover consumers in the consumerPool not matched by any payer:
   if (consumerPool.length > 0) {
     const beneIds = consumerPool.map((b) => b.id);
     const beneNames = consumerPool.map((b) => b.name);
     const firstBene = consumerPool[0];
+    const roundId = `init_cons_${firstBene.id}_${Date.now()}`;
 
-    await addDoc(collection(db, ROUNDS_COLLECTION), {
+    await setDoc(doc(db, ROUNDS_COLLECTION, roundId), {
       payerId: firstBene.id,
       payerName: firstBene.name,
       cupsPaid: 0,
@@ -825,14 +1111,15 @@ export async function importBaseData(
       note: 'Saisie initiale (Consommations)',
       createdAt: new Date().toISOString(),
     });
+    metrics.writesSent += 1;
   }
+
+  notifyMetrics('Importation base initiale terminée');
 }
 
-
-/**
- * Balance Calculation Engine
- * Calculates exact cups/euros contributed vs consumed per colleague.
- */
+// ============================================================================
+// 11. BALANCE CALCULATION ENGINE (Pure memory computation, zero database calls)
+// ============================================================================
 export function calculateBalances(
   colleagues: Colleague[],
   rounds: CoffeeRound[],
@@ -840,7 +1127,6 @@ export function calculateBalances(
 ): ColleagueBalance[] {
   const map: Record<string, ColleagueBalance> = {};
 
-  // Initialize for all current colleagues
   colleagues.forEach((col) => {
     map[col.id] = {
       colleague: col,
@@ -856,14 +1142,12 @@ export function calculateBalances(
     };
   });
 
-  // Process all rounds chronologically or as list
   rounds.forEach((round) => {
-    // Payer logic
     if (map[round.payerId]) {
       map[round.payerId].cupsPaid += round.cupsPaid;
       map[round.payerId].eurosPaid += round.totalAmount || round.cupsPaid * pricePerCup;
       map[round.payerId].roundsPaidCount += 1;
-      
+
       const rDate = new Date(round.date).getTime();
       const currentLast = map[round.payerId].lastPaidDate
         ? new Date(map[round.payerId].lastPaidDate!).getTime()
@@ -873,10 +1157,8 @@ export function calculateBalances(
       }
     }
 
-    // Beneficiaries logic
     const beneCount = round.beneficiaryIds.length;
     if (beneCount > 0) {
-      // Each beneficiary consumed (total cups paid in round / number of beneficiaries)
       const cupsPerBeneficiary = round.cupsPaid / beneCount;
       const eurosPerBeneficiary = (round.totalAmount || round.cupsPaid * pricePerCup) / beneCount;
 
@@ -890,7 +1172,6 @@ export function calculateBalances(
     }
   });
 
-  // Calculate Net Balances
   return Object.values(map).map((b) => {
     const netCups = b.cupsPaid - b.cupsConsumed;
     const netEuros = b.eurosPaid - b.eurosConsumed;

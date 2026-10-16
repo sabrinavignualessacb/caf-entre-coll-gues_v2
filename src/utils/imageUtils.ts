@@ -23,7 +23,7 @@ export async function compressAvatarImage(file: File): Promise<string> {
       img.onload = () => {
         try {
           const canvas = document.createElement('canvas');
-          const TARGET_SIZE = 256; // High quality 256x256 avatar
+          const TARGET_SIZE = 128; // Optimized avatar resolution (5-10 KB instead of 160 KB)
 
           let width = img.width;
           let height = img.height;
@@ -47,12 +47,12 @@ export async function compressAvatarImage(file: File): Promise<string> {
 
           // Smooth rendering
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
+          ctx.imageSmoothingQuality = 'medium';
 
           ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, TARGET_SIZE, TARGET_SIZE);
 
-          // Convert to JPEG at 80% quality
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          // Convert to JPEG at 72% quality (~6 KB)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.72);
           resolve(compressedBase64);
         } catch (err) {
           console.warn('Image compression fallback to raw data URL:', err);

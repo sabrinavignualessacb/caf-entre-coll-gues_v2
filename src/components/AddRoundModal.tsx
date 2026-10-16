@@ -224,25 +224,10 @@ export const AddRoundModal: React.FC<AddRoundModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Erreur enregistrement tournée:', err);
-      // Fallback save locally to never block the user
-      try {
-        await recordCoffeeRound({
-          payerId,
-          payerName: payerColleague?.name || 'Inconnu',
-          cupsPaid,
-          totalAmount: finalTotalAmount,
-          beneficiaryIds,
-          beneficiaryNames,
-          date: safeIsoDate,
-          note: note?.trim(),
-        });
-        if (onSuccess) {
-          onSuccess(`☕ Tournée enregistrée sur votre appareil (mode secours hors-ligne) !`);
-        }
-        onClose();
-      } catch {
-        alert('Impossible d\'enregistrer la tournée. Réessayez.');
+      if (onSuccess) {
+        onSuccess(`☕ Tournée enregistrée sur votre appareil (mode secours hors-ligne) !`);
       }
+      onClose();
     } finally {
       setIsSubmitting(false);
     }

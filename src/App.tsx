@@ -10,6 +10,10 @@ import {
   subscribeQuotaState,
   subscribePendingState,
   syncPendingRounds,
+  subscribeFirebaseMetrics,
+  getFirebaseMetrics,
+  resetFirebaseMetrics,
+  FirebaseMetrics,
 } from './services/coffeeService';
 import { Colleague, CoffeeRound, GroupSettings, ColleagueBalance } from './types';
 import { getTheme } from './lib/themes';
@@ -24,7 +28,7 @@ import { AddRoundModal } from './components/AddRoundModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InitialBaseModal } from './components/InitialBaseModal';
 import { WheelOfFortuneModal } from './components/WheelOfFortuneModal';
-import { PlusCircle, CheckCircle, Dices, AlertTriangle, ExternalLink, RefreshCw, CloudOff } from 'lucide-react';
+import { PlusCircle, CheckCircle, Dices, AlertTriangle, ExternalLink, RefreshCw, CloudOff, Activity, BarChart2, X, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [colleagues, setColleagues] = useState<Colleague[]>(() => {
@@ -61,12 +65,14 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
   const [manualSyncMsg, setManualSyncMsg] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<FirebaseMetrics>(getFirebaseMetrics);
+  const [isMetricsOpen, setIsMetricsOpen] = useState(false);
 
   const handleManualSyncAll = async () => {
     setIsManualSyncing(true);
     setManualSyncMsg(null);
     try {
-      const res = await syncPendingRounds();
+      const res = await syncPendingRounds(true);
       if (res.remaining > 0) {
         setManualSyncMsg('Le quota Firebase d\'aujourd\'hui est encore actif. Vos tournées restent protégées sur cet appareil et seront synchronisées automatiquement dès demain matin.');
       } else {
@@ -111,8 +117,13 @@ export default function App() {
       setPendingCount(count);
     });
 
-    // Attempt automatic sync in case quota reset
-    syncPendingRounds().catch(() => {});
+    // Listen to in-memory Firebase metrics
+    const unsubMetrics = subscribeFirebaseMetrics((m) => {
+      setMetrics(m);
+    });
+
+    // Attempt automatic sync only if quota isn't currently blocked
+    syncPendingRounds(false).catch(() => {});
 
     // Real-time subscriptions with cache
     const handleSubscriptionError = (err: unknown) => {
@@ -172,6 +183,7 @@ export default function App() {
     return () => {
       unsubQuota();
       unsubPending();
+      unsubMetrics();
       unsubscribeColleagues();
       unsubscribeRounds();
       unsubscribeSettings();
@@ -319,6 +331,15 @@ export default function App() {
                     </button>
                   )}
 
+                  <button
+                    type="button"
+                    onClick={() => setIsMetricsOpen(true)}
+                    className="px-2.5 py-1.5 bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs"
+                  >
+                    <Activity className="w-3.5 h-3.5 text-amber-800" />
+                    <span>Audit & Métriques</span>
+                  </button>
+
                   <a
                     href="https://console.firebase.google.com/project/concentrated-battery-f6shk/firestore/databases/ai-studio-coffeeround-d0e6adb4-35d6-473d-b3d9-7ecd6b8eeab7/data?openUpgradeDialog=true"
                     target="_blank"
@@ -450,6 +471,161 @@ export default function App() {
         colleagues={colleagues}
         onSelectWinner={(colleagueId) => handleOpenAddRoundForPayer(colleagueId)}
       />
+
+      {/* Floating Firebase Diagnostic Pill */}
+      <button
+        type="button"
+        onClick={() => setIsMetricsOpen(true)}
+        className="fixed bottom-3 right-3 z-40 bg-slate-900/90 hover:bg-slate-900 text-white text-[10px] font-mono font-semibold px-2.5 py-1.5 rounded-full shadow-lg border border-slate-700/80 flex items-center gap-1.5 backdrop-blur-xs transition-all cursor-pointer hover:scale-105 active:scale-95"
+        title="Ouvrir le moniteur d'activité applicative Firebase"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-slate-300">Activité:</span>
+        <span className="text-amber-300 font-bold">{metrics.writesSent}W</span>
+        <span className="text-slate-500">•</span>
+        <span className="text-emerald-300 font-bold">{metrics.liveUpdatesReceived} màj</span>
+        <span className="text-slate-500">•</span>
+        <span className="text-cyan-300 font-bold">{metrics.activeListenersCount} flux</span>
+      </button>
+
+      {/* Firebase Diagnostic Modal */}
+      {isMetricsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-white">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-400">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-white">
+                    Activité & Diagnostics Firebase
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Observation des événements documentaires de la session cliente
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMetricsOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
+              {/* Stat Cards Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-2.5 text-center">
+                  <span className="text-[9px] uppercase font-bold text-cyan-400 block mb-0.5">Cache Local</span>
+                  <span className="text-lg font-mono font-black text-cyan-300">{metrics.cachedDocsRendered}</span>
+                  <span className="text-[8px] text-slate-400 block">docs IndexedDB</span>
+                </div>
+
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-2.5 text-center">
+                  <span className="text-[9px] uppercase font-bold text-emerald-400 block mb-0.5">Deltas Direct</span>
+                  <span className="text-lg font-mono font-black text-emerald-300">{metrics.liveUpdatesReceived}</span>
+                  <span className="text-[8px] text-slate-400 block">màj reçues</span>
+                </div>
+
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-2.5 text-center">
+                  <span className="text-[9px] uppercase font-bold text-amber-400 block mb-0.5">Écritures</span>
+                  <span className="text-lg font-mono font-black text-amber-300">{metrics.writesSent}</span>
+                  <span className="text-[8px] text-slate-400 block">actions envoyées</span>
+                </div>
+
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-2.5 text-center">
+                  <span className="text-[9px] uppercase font-bold text-rose-400 block mb-0.5">Suppressions</span>
+                  <span className="text-lg font-mono font-black text-rose-300">{metrics.deletesSent}</span>
+                  <span className="text-[8px] text-slate-400 block">actions effacées</span>
+                </div>
+
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-2.5 text-center col-span-2 sm:col-span-1">
+                  <span className="text-[9px] uppercase font-bold text-purple-400 block mb-0.5">Écouteurs</span>
+                  <span className="text-lg font-mono font-black text-purple-300">{metrics.activeListenersCount}</span>
+                  <span className="text-[8px] text-slate-400 block">canaux actifs</span>
+                </div>
+              </div>
+
+              {/* Crucial Server Billing Disclaimer */}
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 space-y-1.5 text-[11px] text-amber-200 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 text-amber-300 text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  Précision technique : Facturation Firestore côté serveur
+                </div>
+                <p>
+                  Le SDK Web client ne dispose pas d'API exposant le nombre de lectures facturées par Google Cloud lors de l'établissement d'une requête. Lors de la synchronisation d'un écouteur avec le serveur, l'évaluation de la requête est décomptée côté serveur même si les documents sont déjà en cache et qu'aucun changement n'est émis (0 delta). <strong>La seule autorité officielle de consommation reste la Console Google Cloud / Firebase.</strong>
+                </p>
+              </div>
+
+              {/* Architecture & Verification Checklist */}
+              <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 space-y-2.5">
+                <h4 className="font-bold text-xs text-white flex items-center gap-1.5 uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Garanties d'architecture vérifiées
+                </h4>
+                <div className="space-y-1.5 text-[11px] text-slate-300 leading-relaxed">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">✓</span>
+                    <span><strong>Écouteurs Singletons :</strong> 3 canaux maximum (Collègues, Tournées, Paramètres) partagés par l'ensemble des composants.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">✓</span>
+                    <span><strong>Gestionnaire Multi-Onglets :</strong> <code>persistentMultipleTabManager()</code> mutualise la connexion réseau physique via un onglet primaire.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">✓</span>
+                    <span><strong>Écritures Idempotentes :</strong> Attribution d'identifiants déterministes évitant toute duplication de tournée en cas de reconnexion.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">✓</span>
+                    <span><strong>Protection Anti-Boucle :</strong> Aucune tentative de synchronisation en boucle en cas de quota dépassé.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Session Details */}
+              <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-3 space-y-1 text-[11px] text-slate-400">
+                <div className="flex justify-between">
+                  <span>Dernière opération :</span>
+                  <span className="text-slate-200 font-mono">{metrics.lastOperation}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Créations d'écouteurs :</span>
+                  <span className="text-slate-200 font-mono">{metrics.listenerCreations}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Nettoyages d'écouteurs :</span>
+                  <span className="text-slate-200 font-mono">{metrics.listenerCleanups}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 flex items-center justify-between shrink-0 bg-slate-900">
+              <button
+                type="button"
+                onClick={resetFirebaseMetrics}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+              >
+                Réinitialiser les compteurs
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsMetricsOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow-sm"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
