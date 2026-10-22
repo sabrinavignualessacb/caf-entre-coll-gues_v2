@@ -96,6 +96,11 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
     }
   });
 
+  // Calculate today's specific status
+  const todayRounds = roundsByDate[todayStr] || [];
+  const todayCups = todayRounds.reduce((sum, r) => sum + r.cupsPaid, 0);
+  const todayPayers = Array.from(new Set(todayRounds.map((r) => r.payerName).filter(Boolean)));
+
   const frenchDayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
   const formatRangeHeader = () => {
@@ -107,7 +112,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 border border-slate-200 shadow-xs space-y-2">
       {/* Header & Controls */}
-      <div className="flex items-center justify-between gap-1.5 pb-1.5 border-b border-slate-100">
+      <div className="flex items-center justify-between gap-1.5 pb-1.5 border-b border-slate-100 flex-wrap">
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
@@ -118,12 +123,15 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1 font-bold text-xs text-slate-800">
-              <span className="truncate">Calendrier</span>
-              <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-600 px-1 py-0.2 rounded font-medium shrink-0">
-                {totalWeeklyCups}☕
+              <span className="truncate">Calendrier des Tournées</span>
+              <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.2 rounded font-medium shrink-0">
+                {totalWeeklyCups} ☕ cette semaine
               </span>
               {isCollapsed ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronUp className="w-3 h-3 text-slate-400" />}
             </div>
+            <p className="text-[9px] text-slate-400 truncate">
+              Vérifiez en un clin d’œil si la tournée du jour a été enregistrée
+            </p>
           </div>
         </button>
 
@@ -132,7 +140,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
           <button
             type="button"
             onClick={() => setShowWeekend(!showWeekend)}
-            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-900 border border-amber-500/20 hover:bg-amber-500/20 transition-all"
+            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-900 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer"
             title={showWeekend ? "Masquer le week-end" : "Afficher le week-end"}
           >
             {showWeekend ? '7j' : '5j'}
@@ -141,7 +149,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
           <button
             type="button"
             onClick={() => setWeekOffset((prev) => prev - 1)}
-            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
             title="Semaine précédente"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -150,7 +158,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
           <button
             type="button"
             onClick={() => setWeekOffset(0)}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
               weekOffset === 0
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -162,12 +170,51 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
           <button
             type="button"
             onClick={() => setWeekOffset((prev) => prev + 1)}
-            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
             title="Semaine suivante"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
+      </div>
+
+      {/* Prominent Visual Indicator for Today's Round */}
+      <div className="w-full">
+        {todayRounds.length > 0 ? (
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="truncate">
+                <strong>Tournée du jour bien saisie !</strong> {todayCups} café{todayCups > 1 ? 's' : ''} payé{todayCups > 1 ? 's' : ''} par <strong>{todayPayers.join(', ')}</strong>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onAddRoundForDate(todayStr)}
+              className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline shrink-0 cursor-pointer"
+              title="Ajouter un autre café aujourd'hui"
+            >
+              + Autre tournée
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Coffee className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="truncate text-amber-800">
+                <strong>Aujourd'hui :</strong> pas encore de tournée enregistrée
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onAddRoundForDate(todayStr)}
+              className="px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[10px] shrink-0 transition-colors shadow-xs cursor-pointer flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Saisir le café du jour</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Days Cards Grid */}
@@ -185,6 +232,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
 
             // Format 05/08 (DD/MM fits cleanly on mobile)
             const dateDisplay = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const firstPayer = dayRounds[0]?.payerName;
 
             return (
               <div
@@ -198,26 +246,30 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
                 }}
                 title={
                   cupsCount > 0
-                    ? `Modifier la tournée du ${dateDisplay} (${cupsCount} café${cupsCount > 1 ? 's' : ''})`
+                    ? `Modifier la tournée du ${dateDisplay} (${cupsCount} café${cupsCount > 1 ? 's' : ''}${firstPayer ? ` par ${firstPayer}` : ''})`
                     : `Saisir une tournée pour le ${dateDisplay}`
                 }
-                className={`p-1 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center relative min-h-[64px] sm:min-h-[72px] ${
+                className={`p-1 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center relative min-h-[68px] sm:min-h-[74px] ${
                   isSelected
                     ? 'bg-slate-900 border-slate-900 text-white shadow-md ring-2 ring-emerald-400'
                     : isToday
-                    ? 'bg-emerald-50 border-emerald-300 text-slate-900'
+                    ? cupsCount > 0
+                      ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/50 text-slate-900 shadow-xs'
+                      : 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300 text-slate-900'
                     : cupsCount > 0
-                    ? 'bg-amber-50/70 border-amber-300 text-slate-900 hover:bg-amber-100/80 shadow-xs'
+                    ? 'bg-emerald-50/50 border-emerald-200 text-slate-900 hover:bg-emerald-100/60 shadow-xs'
                     : 'bg-slate-50/60 border-slate-200 text-slate-700 hover:bg-slate-100'
                 }`}
               >
                 {/* Day Name */}
                 <div className="w-full text-[9px] sm:text-[10px] font-extrabold flex items-center justify-between px-0.5">
-                  <span className={isSelected ? 'text-slate-300' : 'text-slate-500'}>
+                  <span className={isSelected ? 'text-slate-300' : isToday ? 'text-emerald-800 font-black' : 'text-slate-500'}>
                     {frenchDayNames[dayIdx].substring(0, 3)}
                   </span>
                   {isToday && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" title="Aujourd'hui" />
+                    <span className="text-[8px] font-black uppercase text-emerald-700 bg-emerald-200/60 px-1 rounded">
+                      Auj.
+                    </span>
                   )}
                 </div>
 
@@ -226,6 +278,13 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
                   {dateDisplay}
                 </div>
 
+                {/* Payer Name preview if exists */}
+                {firstPayer && (
+                  <div className="text-[8px] font-bold text-slate-600 truncate w-full px-0.5 leading-none" title={`Payé par ${firstPayer}`}>
+                    {firstPayer}
+                  </div>
+                )}
+
                 {/* Cup Count + quick add button */}
                 <div className="flex items-center justify-between w-full px-0.5 mt-0.5">
                   <div
@@ -233,15 +292,15 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
                       cupsCount > 0
                         ? isSelected
                           ? 'bg-emerald-400/20 text-emerald-300'
-                          : 'bg-amber-100 text-amber-900'
+                          : 'bg-emerald-100 text-emerald-900'
                         : isSelected
                         ? 'text-slate-400'
                         : 'text-slate-400'
                     }`}
                   >
-                    <Coffee className={`w-2.5 h-2.5 ${cupsCount > 0 ? 'text-amber-700' : 'text-slate-400'}`} />
+                    <Coffee className={`w-2.5 h-2.5 ${cupsCount > 0 ? 'text-emerald-700' : 'text-slate-400'}`} />
                     <span>{cupsCount}</span>
-                    {cupsCount > 0 && <Pencil className="w-2 h-2 text-amber-600 ml-0.5 opacity-80" />}
+                    {cupsCount > 0 && <Pencil className="w-2 h-2 text-emerald-600 ml-0.5 opacity-80" />}
                   </div>
 
                   <button

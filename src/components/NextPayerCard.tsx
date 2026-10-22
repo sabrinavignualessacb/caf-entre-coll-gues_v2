@@ -1,11 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Coffee, Sparkles, ArrowRight, UserX, ChevronDown, RotateCcw, Dices, RotateCw, Trophy, Users, X, Check } from 'lucide-react';
+import {
+  Coffee,
+  Sparkles,
+  ArrowRight,
+  UserX,
+  ChevronDown,
+  RotateCcw,
+  Dices,
+  RotateCw,
+  Trophy,
+  Users,
+  X,
+  Check,
+  Calendar,
+  History,
+  Info,
+  Scale,
+  Award
+} from 'lucide-react';
 import { ColleagueBalance, GroupSettings, Colleague } from '../types';
 import { updateColleague, resetColleagueCounter } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
 import { ThemeConfig } from '../lib/themes';
-import { isColleagueOnHoliday } from '../utils/colleagueUtils';
+import { isColleagueOnHoliday, formatLastPaidRelative, formatDateFR } from '../utils/colleagueUtils';
 
 interface NextPayerCardProps {
   balances: ColleagueBalance[];
@@ -15,17 +33,6 @@ interface NextPayerCardProps {
   colleagues: Colleague[];
   onOpenFullWheel?: () => void;
 }
-
-const WHEEL_COLORS = [
-  '#f59e0b', // amber-500
-  '#10b981', // emerald-500
-  '#3b82f6', // blue-500
-  '#8b5cf6', // purple-500
-  '#ec4899', // pink-500
-  '#06b6d4', // cyan-500
-  '#f97316', // orange-500
-  '#14b8a6', // teal-500
-];
 
 export const NextPayerCard: React.FC<NextPayerCardProps> = ({
   balances,
@@ -49,16 +56,6 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
     return nameLower.includes('invit') || nameLower.includes('guest');
   };
 
-  // Helper to identify the core main rotation team (Vincent, Fred, Sabrina)
-  const isMainRotationColleague = (c: Colleague) => {
-    const nameLower = (c.name || '').trim().toLowerCase();
-    return (
-      nameLower.includes('vincent') ||
-      nameLower.includes('fred') ||
-      nameLower.includes('sabrina')
-    );
-  };
-
   // Filter active colleagues (not on holiday/inactive, checking date periods too)
   const activeBalances = balances.filter((b) => !isColleagueOnHoliday(b.colleague));
 
@@ -74,39 +71,92 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
     );
   }
 
-  // Sort active balances ascending (most negative first) for dropdown
-  const sorted = [...activeBalances].sort((a, b) => a.netCupsBalance - b.netCupsBalance);
-
-  // Eligible main rotation payers (Vincent, Fred, Sabrina)
-  const mainRotationPayers = activeBalances.filter((b) => isMainRotationColleague(b.colleague));
+  // Eligible non-guest colleagues
   const eligibleNonGuests = activeBalances.filter((b) => !isGuestColleague(b.colleague));
-
-  // Determine candidate pool: rotation team > non-guests > all active
-  const candidatePool =
-    mainRotationPayers.length > 0
-      ? mainRotationPayers
-      : eligibleNonGuests.length > 0
-      ? eligibleNonGuests
-      : activeBalances;
+  const candidatePool = eligibleNonGuests.length > 0 ? eligibleNonGuests : activeBalances;
 
   // Find minimum net balance among candidate pool
   const minCups = Math.min(...candidatePool.map((b) => b.netCupsBalance));
 
-  // Find all candidate balances that are tied at minCups (difference < 0.01)
-  const tiedCandidates = candidatePool.filter((b) => Math.abs(b.netCupsBalance - minCups) < 0.01);
+  // Find all candidate balances that are tied at minCups (difference < 0.1)
+  const tiedCandidates = candidatePool.filter(
+    (b) => Math.abs(b.netCupsBalance - minCups) < 0.1
+  );
   const isTie = tiedCandidates.length >= 2;
 
-  // Next payer default (if not tie or winner chosen)
-  const defaultPayer = wheelWinner
-    ? tiedCandidates.find((b) => b.colleague.id === wheelWinner.id) || tiedCandidates[0]
-    : tiedCandidates[0];
+  // Active designated payer:
+  // If wheelWinner is selected, use that; otherwise use the first tied or first candidate
+  const sortedCandidates = [...candidatePool].sort((a, b) => {
+    const diff = a.netCupsBalance - b.netCupsBalance;
+    if (Math.abs(diff) >= 0.1) return diff;
+    if (!a.lastPaidDate && b.lastPaidDate) return -1;
+    if (a.lastPaidDate && !b.lastPaidDate) return 1;
+    if (a.lastPaidDate && b.lastPaidDate) {
+      const timeA = new Date(a.lastPaidDate).getTime() || 0;
+      const timeB = new Date(b.lastPaidDate).getTime() || 0;
+      if (timeA !== timeB) return timeA - timeB;
+    }
+    if (a.cupsPaid !== b.cupsPaid) return a.cupsPaid - b.cupsPaid;
+    return b.cupsConsumed - a.cupsConsumed;
+  });
 
+  const defaultPayer = sortedCandidates[0] || activeBalances[0];
   const activePayer = wheelWinner
     ? activeBalances.find((b) => b.colleague.id === wheelWinner.id) || defaultPayer
     : defaultPayer;
 
   const oweCups = Math.abs(activePayer.netCupsBalance);
   const oweEuros = Math.abs(activePayer.netEurosBalance);
+
+  // Compute clear, human-readable justification for the choice
+  const getJustification = () => {
+    if (wheelWinner && activePayer.colleague.id === wheelWinner.id) {
+      return {
+        tag: 'Désigné(e) par la Roue',
+        badgeClass: 'bg-purple-500/20 text-purple-200 border-purple-400/30',
+        detail: `Tiré(e) au sort par la roue parmi les collègues à égalité (${minCups} ☕).`,
+      };
+    }
+
+    if (activePayer.netCupsBalance < -0.1) {
+      const owes = Math.abs(activePayer.netCupsBalance);
+      if (isTie) {
+        return {
+          tag: `Dette égale (${activePayer.netCupsBalance} ☕)`,
+          badgeClass: 'bg-rose-500/25 text-rose-200 border-rose-400/40',
+          detail: `À égalité de dette (-${owes} ☕), n'a pas payé depuis le plus longtemps (${formatLastPaidRelative(activePayer.lastPaidDate)}).`,
+        };
+      }
+      return {
+        tag: `Doit ${owes} café${owes > 1 ? 's' : ''}`,
+        badgeClass: 'bg-rose-500/25 text-rose-200 border-rose-400/40',
+        detail: `Plus grand solde débiteur : a consommé plus de cafés qu'il/elle n'en a payés (-${owes} cafés au cumul).`,
+      };
+    }
+
+    if (Math.abs(activePayer.netCupsBalance) <= 0.1) {
+      if (!activePayer.lastPaidDate) {
+        return {
+          tag: 'Premier tour de rôle',
+          badgeClass: 'bg-amber-500/25 text-amber-200 border-amber-400/40',
+          detail: "Solde équilibré (0 café), mais n'a pas encore payé de tournée pour l'équipe.",
+        };
+      }
+      return {
+        tag: 'Tour de rôle équitable',
+        badgeClass: 'bg-amber-500/25 text-amber-200 border-amber-400/40',
+        detail: `Comptes à jour (0 café). Le tour revient à la personne dont le dernier paiement est le plus ancien (${formatLastPaidRelative(activePayer.lastPaidDate)}).`,
+      };
+    }
+
+    return {
+      tag: 'Rotation d’équipe',
+      badgeClass: 'bg-emerald-500/25 text-emerald-200 border-emerald-400/40',
+      detail: `Solde créditeur (+${activePayer.netCupsBalance} ☕), mais dernier paiement le plus lointain (${formatLastPaidRelative(activePayer.lastPaidDate)}).`,
+    };
+  };
+
+  const justification = getJustification();
 
   // Handle tie wheel spin
   const handleSpinTieWheel = () => {
@@ -148,9 +198,13 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
     }
   };
 
-  // Quick action: reset single colleague counter to 0
+  // Quick action: reset single colleague counter to 0 with explicit confirmation
   const handleResetSinglePayer = async (colleagueId: string, colleagueName: string, netCups: number) => {
-    if (confirm(`Voulez-vous réinitialiser le compteur de ${colleagueName} à 0 café ?`)) {
+    if (
+      confirm(
+        `Attention : cette action va créer une tournée d'ajustement pour ramener le solde de ${colleagueName} à 0 café.\n\nÀ n'utiliser que si cette personne a régularisé son compte en liquide. Confirmez-vous ?`
+      )
+    ) {
       setIsResetting(true);
       try {
         await resetColleagueCounter(colleagueId, colleagueName, netCups, settings.pricePerCup);
@@ -200,7 +254,7 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                       Changer de payeur
                     </h3>
                     <p className="text-[11px] sm:text-xs text-slate-400">
-                      Désigner manuellement qui paie ce tour
+                      Sélectionnez qui règle cette tournée
                     </p>
                   </div>
                 </div>
@@ -222,10 +276,10 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                 <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                      Payeur suggéré actuellement
+                      Payeur sélectionné
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
-                      Actuel
+                      {justification.tag}
                     </span>
                   </div>
 
@@ -235,25 +289,29 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                       name={activePayer.colleague.name}
                       sizeClassName="w-10 h-10 text-sm"
                     />
-                    <div>
-                      <p className="font-bold text-sm text-white">{activePayer.colleague.name}</p>
-                      <p className="text-slate-400 text-xs">
-                        Solde :{' '}
-                        <span
-                          className={
-                            activePayer.netCupsBalance < 0
-                              ? 'text-rose-400 font-bold'
-                              : activePayer.netCupsBalance > 0
-                              ? 'text-emerald-400 font-bold'
-                              : 'text-slate-300 font-semibold'
-                          }
-                        >
-                          {activePayer.netCupsBalance > 0
-                            ? `+${activePayer.netCupsBalance}`
-                            : `${activePayer.netCupsBalance}`}{' '}
-                          café{Math.abs(activePayer.netCupsBalance) > 1 ? 's' : ''}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-sm text-white truncate">{activePayer.colleague.name}</p>
+                      <div className="text-slate-300 text-[11px] flex items-center gap-2 flex-wrap">
+                        <span>
+                          Solde cumulé :{' '}
+                          <strong
+                            className={
+                              activePayer.netCupsBalance < 0
+                                ? 'text-rose-400'
+                                : activePayer.netCupsBalance > 0
+                                ? 'text-emerald-400'
+                                : 'text-slate-300'
+                            }
+                          >
+                            {activePayer.netCupsBalance > 0
+                              ? `+${activePayer.netCupsBalance}`
+                              : `${activePayer.netCupsBalance}`}{' '}
+                            café{Math.abs(activePayer.netCupsBalance) > 1 ? 's' : ''}
+                          </strong>
                         </span>
-                      </p>
+                        <span className="text-slate-500">•</span>
+                        <span>Payé : {formatLastPaidRelative(activePayer.lastPaidDate)}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -279,35 +337,34 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                       }
                       disabled={isResetting}
                       className="w-full text-left px-3 py-2 bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer disabled:opacity-50"
-                      title={`Remettre le compteur de ${activePayer.colleague.name} à zéro`}
+                      title={`Régulariser et remettre à zéro le compteur de ${activePayer.colleague.name}`}
                     >
-                      <span>Remettre à 0 🔄</span>
+                      <span>Régulariser à 0 🔄</span>
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Colleague selection list */}
+                {/* Colleague selection list with detailed cumulative numbers */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Choisir directement un collègue ({sorted.length})
+                      Tous les collègues ({sortedCandidates.length})
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      Du plus en retard au plus en avance
+                      Classés du plus débiteur au plus en avance
                     </span>
                   </div>
 
-                  {/* Scrollable list with good max height */}
                   <div className="space-y-1.5 max-h-56 sm:max-h-64 overflow-y-auto pr-1">
-                    {sorted.map((b) => {
+                    {sortedCandidates.map((b, idx) => {
                       const isCurrent = b.colleague.id === activePayer.colleague.id;
                       return (
                         <button
                           key={b.colleague.id}
                           type="button"
                           onClick={() => {
-                            onSelectPayer(b.colleague.id);
+                            setWheelWinner(b.colleague);
                             setShowOverridePicker(false);
                           }}
                           className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-xs border cursor-pointer ${
@@ -316,19 +373,20 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                               : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 hover:border-slate-600 text-slate-200'
                           }`}
                         >
-                          <div className="flex items-center gap-2.5 truncate">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-[10px] font-mono font-bold text-slate-500 w-3">
+                              #{idx + 1}
+                            </span>
                             <UserAvatar
                               avatar={b.colleague.avatar}
                               name={b.colleague.name}
                               sizeClassName="w-7 h-7 text-xs"
                             />
-                            <div className="truncate">
+                            <div className="min-w-0">
                               <span className="truncate block font-semibold">{b.colleague.name}</span>
-                              {isCurrent && (
-                                <span className="text-[10px] text-amber-400 font-normal">
-                                  Actuellement sélectionné
-                                </span>
-                              )}
+                              <span className="text-[10px] text-slate-400 block">
+                                P: {b.cupsPaid} • C: {Math.round(b.cupsConsumed * 10) / 10} • Dernier : {formatLastPaidRelative(b.lastPaidDate)}
+                              </span>
                             </div>
                           </div>
 
@@ -379,31 +437,38 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
         {/* Decorative ambient background accents */}
         <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
 
-        {/* Top Bar: Badge & Override Button */}
+        {/* Top Bar: Badge, Justification & Actions */}
         <div className="w-full flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${theme.spotlightBadgeBg} border ${theme.spotlightBadgeBorder} ${theme.spotlightBadgeText} text-[10px] sm:text-[11px] uppercase tracking-wider font-bold`}>
               <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
               <span>{isTie && !wheelWinner ? 'Égalité au tour' : 'Prochaine Tournée'}</span>
             </span>
 
-            {isTie && !wheelWinner && (
+            {/* Tie Indicator or Justification Pill */}
+            {isTie && !wheelWinner ? (
               <span className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
-                {tiedCandidates.length} à égalité ({minCups}☕)
+                {tiedCandidates.length} à égalité ({minCups} ☕)
+              </span>
+            ) : (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${justification.badgeClass}`}>
+                <Scale className="w-2.5 h-2.5" />
+                <span>{justification.tag}</span>
               </span>
             )}
           </div>
 
           {/* Quick Override Button & Full Wheel Button */}
-          <div className="flex items-center gap-1 relative">
+          <div className="flex items-center gap-1 shrink-0">
             {onOpenFullWheel && (
               <button
+                type="button"
                 onClick={onOpenFullWheel}
-                className="text-[10px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 px-2 py-1 rounded-full flex items-center gap-1 transition-all font-semibold"
+                className="text-[10px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 px-2 py-1 rounded-full flex items-center gap-1 transition-all font-semibold cursor-pointer"
                 title="Ouvrir la roue avec tous les collègues"
               >
                 <Dices className="w-3 h-3 text-amber-400" />
-                <span className="hidden xs:inline">Roue</span>
+                <span className="hidden xs:inline">Roue complète</span>
               </button>
             )}
 
@@ -411,7 +476,7 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
               type="button"
               onClick={() => setShowOverridePicker(true)}
               className="text-[10px] text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 px-2.5 py-1 rounded-full flex items-center gap-1 transition-all font-medium cursor-pointer"
-              title="Changer de payeur ou réinitialiser son solde"
+              title="Changer manuellement de payeur"
             >
               <UserX className="w-3 h-3 text-amber-400" />
               <span>Changer</span>
@@ -420,189 +485,272 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
           </div>
         </div>
 
-      {/* Main Centered Recommendation / Wheel Section */}
-      {isTie && !wheelWinner ? (
-        /* TIE DETECTED: Show the interactive Wheel with the tied colleagues */
-        <div className="w-full my-1 flex flex-col items-center">
-          <p className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-amber-300 mb-2 flex items-center gap-1.5">
-            <Dices className="w-4 h-4 text-amber-400 animate-spin-slow" />
-            <span>Égalité entre {tiedCandidates.map((c) => c.colleague.name).join(' & ')}</span>
-          </p>
+        {/* ========================================================================= */}
+        {/* CASE 1: TIE DETECTED AND NO WINNER YET -> DISPLAY THE WHEEL DIRECTLY!     */}
+        {/* ========================================================================= */}
+        {isTie && !wheelWinner ? (
+          <div className="w-full my-1 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+            <p className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-amber-300 mb-1 flex items-center gap-1.5">
+              <Dices className={`w-4 h-4 text-amber-400 ${isSpinning ? 'animate-spin' : ''}`} />
+              <span>Égalité entre {tiedCandidates.map((c) => c.colleague.name).join(' & ')}</span>
+            </p>
 
-          {/* Mini Wheel Container */}
-          <div className="relative my-1">
-            {/* Top Pointer */}
-            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[14px] border-t-amber-400 drop-shadow-md" />
+            <p className="text-[11px] text-slate-300 mb-2 text-center max-w-sm">
+              {tiedCandidates.length} collègues sont à égalité ({minCups} ☕). Faites tourner la roue pour désigner qui paie la tournée !
+            </p>
 
-            <div className="w-36 h-36 sm:w-44 sm:h-44 relative rounded-full p-1.5 bg-slate-900 border-2 border-amber-400/60 shadow-xl flex items-center justify-center overflow-hidden">
-              <svg
-                viewBox="0 0 200 200"
-                className="w-full h-full rounded-full transition-transform ease-out"
-                style={{
-                  transform: `rotate(${rotationDegree}deg)`,
-                  transitionDuration: isSpinning ? '3500ms' : '0ms',
-                  transitionTimingFunction: 'cubic-bezier(0.15, 0.9, 0.2, 1)',
-                }}
-              >
-                {tiedCandidates.map((cand, i) => {
-                  const numSlices = tiedCandidates.length;
-                  const sliceAngle = 360 / numSlices;
-                  const startAngle = i * sliceAngle;
-                  const endAngle = (i + 1) * sliceAngle;
+            {/* Interactive SVG Wheel Container */}
+            <div className="relative my-1">
+              {/* Top Pointer Arrow */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[14px] border-t-amber-400 drop-shadow-md" />
 
-                  const x1 = 100 + 100 * Math.cos((Math.PI * startAngle) / 180);
-                  const y1 = 100 + 100 * Math.sin((Math.PI * startAngle) / 180);
-                  const x2 = 100 + 100 * Math.cos((Math.PI * endAngle) / 180);
-                  const y2 = 100 + 100 * Math.sin((Math.PI * endAngle) / 180);
-
-                  const largeArcFlag = sliceAngle > 180 ? 1 : 0;
-                  const pathData = `M 100 100 L ${x1} ${y1} A 100 100 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-
-                  const textAngle = startAngle + sliceAngle / 2;
-                  const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
-
-                  return (
-                    <g key={cand.colleague.id}>
-                      <path d={pathData} fill={color} stroke="#0f172a" strokeWidth="2" />
-                      <g transform={`rotate(${textAngle}, 100, 100)`}>
-                        <text
-                          x="155"
-                          y="104"
-                          fill="#ffffff"
-                          fontSize="13"
-                          fontWeight="900"
-                          textAnchor="end"
-                          transform="rotate(180, 155, 104)"
-                          className="select-none font-sans"
-                        >
-                          {cand.colleague.name.length > 7 ? cand.colleague.name.substring(0, 6) + '…' : cand.colleague.name}
-                        </text>
-                      </g>
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Center Hub Button */}
-              <button
-                type="button"
-                onClick={handleSpinTieWheel}
-                disabled={isSpinning}
-                className="absolute w-10 h-10 rounded-full bg-slate-900 border-2 border-amber-400 shadow-lg flex items-center justify-center z-10 active:scale-95 hover:bg-slate-800 transition-all cursor-pointer"
-                title="Tourner la roue"
-              >
-                <Dices className={`w-4 h-4 text-amber-400 ${isSpinning ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-          </div>
-
-          {/* Action Spin Button / Direct Click Row */}
-          <div className="w-full mt-2 space-y-1.5">
-            <button
-              onClick={handleSpinTieWheel}
-              disabled={isSpinning}
-              className={`w-full py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all ${
-                isSpinning
-                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 active:scale-98'
-              }`}
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isSpinning ? 'animate-spin' : ''}`} />
-              <span>{isSpinning ? 'Tirage en cours...' : '🎲 Tourner la Roue pour départager'}</span>
-            </button>
-
-            {/* Quick manual selection buttons if they don't want to spin */}
-            <div className="flex items-center justify-center gap-1.5 pt-0.5">
-              <span className="text-[10px] text-slate-300 font-medium">Ou direct :</span>
-              {tiedCandidates.map((c) => (
-                <button
-                  key={c.colleague.id}
-                  onClick={() => onSelectPayer(c.colleague.id)}
-                  className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 border border-white/15 text-[10px] text-white font-bold flex items-center gap-1 transition-all"
+              <div className="w-40 h-40 sm:w-48 sm:h-48 relative rounded-full p-1.5 bg-slate-900 border-2 border-amber-400/80 shadow-2xl flex items-center justify-center overflow-hidden">
+                <svg
+                  viewBox="0 0 200 200"
+                  className="w-full h-full rounded-full transition-transform ease-out"
+                  style={{
+                    transform: `rotate(${rotationDegree}deg)`,
+                    transitionDuration: isSpinning ? '3500ms' : '0ms',
+                    transitionTimingFunction: 'cubic-bezier(0.15, 0.9, 0.2, 1)',
+                  }}
                 >
-                  <UserAvatar avatar={c.colleague.avatar} name={c.colleague.name} sizeClassName="w-3.5 h-3.5 text-[8px]" />
-                  <span>{c.colleague.name}</span>
+                  {tiedCandidates.map((cand, i) => {
+                    const numSlices = tiedCandidates.length;
+                    const sliceAngle = 360 / numSlices;
+                    const startAngle = i * sliceAngle;
+                    const endAngle = startAngle + sliceAngle;
+
+                    const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
+                      const rad = ((angleDeg - 90) * Math.PI) / 180;
+                      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+                    };
+
+                    const p1 = polarToCartesian(100, 100, 100, startAngle);
+                    const p2 = polarToCartesian(100, 100, 100, endAngle);
+                    const largeArcFlag = sliceAngle > 180 ? 1 : 0;
+                    const pathData = `M 100 100 L ${p1.x} ${p1.y} A 100 100 0 ${largeArcFlag} 1 ${p2.x} ${p2.y} Z`;
+                    const midAngle = startAngle + sliceAngle / 2;
+
+                    const WHEEL_COLORS = [
+                      '#f59e0b', // amber-500
+                      '#10b981', // emerald-500
+                      '#3b82f6', // blue-500
+                      '#8b5cf6', // purple-500
+                      '#ec4899', // pink-500
+                      '#06b6d4', // cyan-500
+                      '#f97316', // orange-500
+                      '#14b8a6', // teal-500
+                    ];
+                    const fillColor = WHEEL_COLORS[i % WHEEL_COLORS.length];
+
+                    return (
+                      <g key={cand.colleague.id}>
+                        <path d={pathData} fill={fillColor} stroke="#0f172a" strokeWidth="2" />
+                        <g transform={`rotate(${midAngle}, 100, 100)`}>
+                          <text
+                            x="100"
+                            y="36"
+                            fill="#ffffff"
+                            fontSize={tiedCandidates.length > 4 ? '11' : '13'}
+                            fontWeight="900"
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            className="drop-shadow-md select-none font-sans"
+                          >
+                            {cand.colleague.name.substring(0, 9)}
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Center Hub Button */}
+                <button
+                  type="button"
+                  onClick={handleSpinTieWheel}
+                  disabled={isSpinning}
+                  className="absolute w-11 h-11 rounded-full bg-slate-900 border-2 border-amber-400 shadow-xl flex items-center justify-center z-10 active:scale-95 hover:bg-slate-800 transition-all cursor-pointer"
+                  title="Tourner la roue"
+                >
+                  <Dices className={`w-5 h-5 text-amber-400 ${isSpinning ? 'animate-spin' : ''}`} />
                 </button>
-              ))}
+              </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        /* SINGLE CANDIDATE OR WHEEL WINNER CHOSEN */
-        <div className="my-0.5 flex flex-col items-center">
-          <p className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${theme.spotlightTitle} mb-1.5`}>
-            {wheelWinner ? (
-              <span className="text-amber-300 flex items-center gap-1 justify-center">
-                <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                Désigné(e) par la roue :
-              </span>
-            ) : (
-              "C'est au tour de :"
-            )}
-          </p>
 
-          {/* Centered Photo / Avatar */}
-          <div className="relative my-0.5">
-            <UserAvatar
-              avatar={activePayer.colleague.avatar}
-              name={activePayer.colleague.name}
-              sizeClassName="w-16 h-16 sm:w-20 sm:h-20 text-3xl sm:text-4xl"
-              className="ring-3 ring-amber-400/80 shadow-xl bg-white/10"
-            />
-          </div>
-
-          {/* Centered Name */}
-          <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${theme.spotlightName} my-0.5 drop-shadow-xs`}>
-            {activePayer.colleague.name}
-          </h2>
-
-          {/* Balance Status */}
-          <div className="flex items-center gap-2">
-            <div className={`text-xs sm:text-sm font-extrabold ${theme.spotlightOweText}`}>
-              {activePayer.netCupsBalance < 0 ? (
-                <span>-{oweCups} café{oweCups > 1 ? 's' : ''}</span>
-              ) : activePayer.netCupsBalance > 0 ? (
-                <span className="text-emerald-400">+{activePayer.netCupsBalance} café{activePayer.netCupsBalance > 1 ? 's' : ''}</span>
-              ) : (
-                <span className={theme.spotlightBalancedText}>À jour (0 café)</span>
-              )}
-            </div>
-            <span className="text-slate-400 text-[10px]">•</span>
-            <span className={`text-[10px] sm:text-xs font-semibold ${theme.spotlightSubtext}`}>
-              {activePayer.netCupsBalance < 0
-                ? `${oweEuros.toFixed(2)} ${settings.currency}`
-                : `${(activePayer.netCupsBalance * settings.pricePerCup).toFixed(2)} ${settings.currency}`}
-            </span>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="w-full mt-2.5 pt-2 border-t border-white/15 flex items-center gap-2">
-            {isTie && wheelWinner && (
+            {/* Action Spin Button & Direct Pick */}
+            <div className="w-full mt-3 max-w-sm space-y-2">
               <button
                 type="button"
                 onClick={handleSpinTieWheel}
                 disabled={isSpinning}
-                className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1 transition-all shrink-0"
-                title="Relancer le tirage de l'égalité"
+                className={`w-full py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer ${
+                  isSpinning
+                    ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 active:scale-98 shadow-amber-500/25'
+                }`}
               >
-                <RotateCw className="w-3.5 h-3.5" />
-                <span className="hidden xs:inline">Relancer</span>
+                <Sparkles className={`w-4 h-4 ${isSpinning ? 'animate-spin' : ''}`} />
+                <span>{isSpinning ? 'Tirage au sort en cours...' : '🎲 Tourner la Roue pour départager'}</span>
               </button>
-            )}
 
-            <button
-              onClick={() => onSelectPayer(activePayer.colleague.id)}
-              className={`${theme.spotlightBtn} flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider shadow-md transition-all active:scale-98 flex items-center justify-center gap-2`}
-            >
-              <span>Saisir la tournée payée par {activePayer.colleague.name}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              {/* Quick direct selection buttons */}
+              <div className="flex items-center justify-center gap-1.5 pt-0.5 flex-wrap">
+                <span className="text-[10px] text-slate-300 font-medium">Ou désigner directement :</span>
+                {tiedCandidates.map((c) => (
+                  <button
+                    key={c.colleague.id}
+                    type="button"
+                    onClick={() => setWheelWinner(c.colleague)}
+                    className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 border border-white/15 text-[10px] text-white font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <UserAvatar avatar={c.colleague.avatar} name={c.colleague.name} sizeClassName="w-3.5 h-3.5 text-[8px]" />
+                    <span>{c.colleague.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-    {overrideModal}
-  </>
+        ) : (
+          /* ========================================================================= */
+          /* CASE 2: SINGLE CANDIDATE OR WHEEL WINNER CHOSEN                           */
+          /* ========================================================================= */
+          <div className="my-0.5 flex flex-col items-center w-full max-w-md animate-in fade-in duration-200">
+            <p className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${theme.spotlightTitle} mb-1 flex items-center gap-1.5`}>
+              {wheelWinner ? (
+                <span className="text-amber-300 flex items-center gap-1 justify-center animate-bounce">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  Désigné(e) par la roue :
+                </span>
+              ) : (
+                "C'est au tour de :"
+              )}
+            </p>
+
+            {/* Centered Photo / Avatar */}
+            <div className="relative my-0.5">
+              <UserAvatar
+                avatar={activePayer.colleague.avatar}
+                name={activePayer.colleague.name}
+                sizeClassName="w-16 h-16 sm:w-20 sm:h-20 text-3xl sm:text-4xl"
+                className="ring-3 ring-amber-400/80 shadow-xl bg-white/10"
+              />
+            </div>
+
+            {/* Centered Name */}
+            <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${theme.spotlightName} my-0.5 drop-shadow-xs`}>
+              {activePayer.colleague.name}
+            </h2>
+
+            {/* Net Balance Status */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`text-xs sm:text-sm font-extrabold ${theme.spotlightOweText}`}>
+                {activePayer.netCupsBalance < 0 ? (
+                  <span>-{oweCups} café{oweCups > 1 ? 's' : ''}</span>
+                ) : activePayer.netCupsBalance > 0 ? (
+                  <span className="text-emerald-400">+{activePayer.netCupsBalance} café{activePayer.netCupsBalance > 1 ? 's' : ''}</span>
+                ) : (
+                  <span className={theme.spotlightBalancedText}>À jour (0 café)</span>
+                )}
+              </div>
+              <span className="text-slate-400 text-[10px]">•</span>
+              <span className={`text-[10px] sm:text-xs font-semibold ${theme.spotlightSubtext}`}>
+                {activePayer.netCupsBalance < 0
+                  ? `${oweEuros.toFixed(2)} ${settings.currency}`
+                  : `${(activePayer.netCupsBalance * settings.pricePerCup).toFixed(2)} ${settings.currency}`}
+              </span>
+            </div>
+
+            {/* CUMULATIVE COUNTERS CARD (Compteurs Cumulés Permanents) */}
+            <div className="w-full bg-black/20 border border-white/15 rounded-xl p-2.5 my-1 text-left space-y-1.5 text-white">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-amber-300 border-b border-white/10 pb-1">
+                <span className="flex items-center gap-1">
+                  <History className="w-3 h-3 text-amber-400" />
+                  Compteurs cumulés de {activePayer.colleague.name}
+                </span>
+                <span className="text-slate-400 font-normal lowercase">historique global</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center text-[11px]">
+                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Payés au total</span>
+                  <span className="font-extrabold text-amber-300 text-xs sm:text-sm">{activePayer.cupsPaid} ☕</span>
+                  <span className="text-[9px] text-slate-400 block font-medium">({activePayer.roundsPaidCount} tournée{activePayer.roundsPaidCount > 1 ? 's' : ''})</span>
+                </div>
+
+                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Bus au total</span>
+                  <span className="font-extrabold text-slate-200 text-xs sm:text-sm">{Math.round(activePayer.cupsConsumed * 10) / 10} ☕</span>
+                  <span className="text-[9px] text-slate-400 block font-medium">({activePayer.roundsBenefitedCount} reçus)</span>
+                </div>
+
+                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Solde net</span>
+                  <span className={`font-black text-xs sm:text-sm ${
+                    activePayer.netCupsBalance < 0
+                      ? 'text-rose-400'
+                      : activePayer.netCupsBalance > 0
+                      ? 'text-emerald-400'
+                      : 'text-slate-200'
+                  }`}>
+                    {activePayer.netCupsBalance > 0 ? `+${activePayer.netCupsBalance}` : activePayer.netCupsBalance} ☕
+                  </span>
+                  <span className="text-[9px] text-slate-400 block font-medium">
+                    {activePayer.netCupsBalance < 0 ? 'En retard' : activePayer.netCupsBalance > 0 ? 'En avance' : 'Équilibré'}
+                  </span>
+                </div>
+
+                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Dernier paiement</span>
+                  <span className="font-bold text-slate-200 text-[10px] sm:text-[11px] block mt-0.5 truncate" title={activePayer.lastPaidDate || 'Jamais'}>
+                    {formatLastPaidRelative(activePayer.lastPaidDate)}
+                  </span>
+                  <span className="text-[8px] text-slate-400 block">
+                    {activePayer.lastPaidDate ? formatDateFR(activePayer.lastPaidDate) : 'aucun'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Clear Why Justification Explanation */}
+              <div className="flex items-start gap-1.5 pt-1 text-[10px] sm:text-[11px] text-slate-300 bg-white/5 p-1.5 rounded-lg border border-white/5">
+                <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <span className="leading-tight">
+                  <strong className="text-amber-300 font-semibold">Pourquoi {activePayer.colleague.name} ?</strong>{' '}
+                  {justification.detail}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="w-full mt-2 pt-2 border-t border-white/15 flex items-center gap-2">
+              {isTie && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWheelWinner(null);
+                    setRotationDegree(0);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shrink-0 cursor-pointer"
+                  title="Faire tourner à nouveau la roue pour départager"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Relancer la Roue</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => onSelectPayer(activePayer.colleague.id)}
+                className={`${theme.spotlightBtn} flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer`}
+              >
+                <span>Saisir la tournée payée par {activePayer.colleague.name}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      {overrideModal}
+    </>
   );
 };
-

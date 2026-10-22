@@ -381,7 +381,7 @@ let roundsUnsub: (() => void) | null = null;
 export function subscribeCoffeeRounds(
   callback: (rounds: CoffeeRound[]) => void,
   onError?: (error: unknown) => void,
-  maxRounds: number = 50
+  maxRounds: number = 250
 ): () => void {
   roundSubscribers.add(callback);
 

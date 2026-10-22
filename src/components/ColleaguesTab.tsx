@@ -537,8 +537,9 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
-                          <span>Solde :{' '}
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium flex-wrap">
+                          <span>
+                            Solde cumulé :{' '}
                             <strong
                               className={
                                 (bal?.netCupsBalance || 0) < 0
@@ -548,9 +549,13 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
                                   : 'text-slate-800'
                               }
                             >
-                              {bal?.netCupsBalance || 0} café(s)
+                              {(bal?.netCupsBalance || 0) > 0 ? `+${bal?.netCupsBalance}` : bal?.netCupsBalance || 0} café(s)
                             </strong>
                           </span>
+                          <span>•</span>
+                          <span>Payés : <strong className="text-slate-700">{bal?.cupsPaid || 0}</strong></span>
+                          <span>•</span>
+                          <span>Bus : <strong className="text-slate-700">{Math.round((bal?.cupsConsumed || 0) * 10) / 10}</strong></span>
                         </div>
                       </div>
                     </div>

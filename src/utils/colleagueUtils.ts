@@ -189,13 +189,32 @@ export function formatHolidayPeriod(col: Colleague): string | null {
   return info.periodText || (info.isOnHoliday ? 'En congé' : null);
 }
 
-function formatDateFR(dateStr: string): string {
+export function formatDateFR(dateStr: string): string {
   if (!dateStr) return '';
-  const parts = dateStr.split('-');
+  const parts = dateStr.slice(0, 10).split('-');
   if (parts.length === 3) {
     return `${parts[2]}/${parts[1]}`;
   }
   return dateStr;
+}
+
+export function formatLastPaidRelative(dateStr?: string): string {
+  if (!dateStr) return 'Jamais';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'Jamais';
+
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startD = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startToday - startD) / (1000 * 60 * 60 * 24));
+
+  const dayStr = String(d.getDate()).padStart(2, '0');
+  const monthStr = String(d.getMonth() + 1).padStart(2, '0');
+
+  if (diffDays === 0) return "Aujourd'hui";
+  if (diffDays === 1) return 'Hier';
+  if (diffDays > 1 && diffDays < 7) return `Il y a ${diffDays} jours (${dayStr}/${monthStr})`;
+  return `Le ${dayStr}/${monthStr}/${d.getFullYear()}`;
 }
 
 function getNextDayFR(dateStr: string): string {

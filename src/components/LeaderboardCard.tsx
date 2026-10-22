@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ColleagueBalance, GroupSettings } from '../types';
-import { Coffee, TrendingDown, TrendingUp, Check, Plus, Palmtree, RotateCcw } from 'lucide-react';
+import { Coffee, TrendingDown, TrendingUp, Check, Plus, Palmtree, RotateCcw, Info, History } from 'lucide-react';
 import { resetColleagueCounter } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
 import { ThemeConfig } from '../lib/themes';
-import { isColleagueOnHoliday, formatHolidayPeriod } from '../utils/colleagueUtils';
+import { isColleagueOnHoliday, formatHolidayPeriod, formatLastPaidRelative } from '../utils/colleagueUtils';
 
 interface LeaderboardCardProps {
   balances: ColleagueBalance[];
@@ -12,6 +12,7 @@ interface LeaderboardCardProps {
   theme: ThemeConfig;
   onSelectPayer: (colleagueId: string) => void;
   onToggleStatus: (colleagueId: string, currentStatus: string) => void;
+  titlePrefix?: string;
 }
 
 export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
@@ -20,6 +21,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
   theme,
   onSelectPayer,
   onToggleStatus,
+  titlePrefix,
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'holiday'>('all');
   const [resettingId, setResettingId] = useState<string | null>(null);
@@ -35,7 +37,11 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
   });
 
   const handleResetSingleColleague = async (colleagueId: string, colleagueName: string, netCups: number) => {
-    if (confirm(`Voulez-vous réinitialiser le solde de ${colleagueName} à 0 café ?`)) {
+    if (
+      confirm(
+        `Attention : cette action va créer un tour d'ajustement pour effacer la dette/crédit de ${colleagueName} et ramener son solde à 0 café.\n\nÀ n'utiliser que si cette personne a régularisé son compte en liquide. Confirmez-vous ?`
+      )
+    ) {
       setResettingId(colleagueId);
       try {
         await resetColleagueCounter(colleagueId, colleagueName, netCups, settings.pricePerCup);
@@ -49,12 +55,16 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 
   return (
     <div className={`${theme.cardBg} rounded-2xl sm:rounded-[28px] p-3 sm:p-5 border ${theme.cardBorder} shadow-xs transition-colors duration-200`}>
-      <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-100">
+      <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100 flex-wrap">
         <div>
           <h3 className={`font-bold text-sm sm:text-base ${theme.cardTitle} flex items-center gap-1.5`}>
             <Coffee className="w-4 h-4 text-slate-700" />
-            Balance & Comptes
+            {titlePrefix ? `${titlePrefix} ` : ''}Soldes & Comptes Cumulés
           </h3>
+          <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+            <History className="w-3 h-3 text-amber-500 inline shrink-0" />
+            <span>Historique permanent • Ne repart jamais à zéro chaque jour</span>
+          </p>
         </div>
 
         {/* Filter Pills */}
@@ -152,10 +162,12 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
-                      <span>P: <strong className="text-slate-800">{item.cupsPaid}</strong></span>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium flex-wrap">
+                      <span>Payés : <strong className="text-slate-800">{item.cupsPaid}</strong></span>
                       <span>•</span>
-                      <span>C: <strong className="text-slate-800">{Math.round(item.cupsConsumed * 10) / 10}</strong></span>
+                      <span>Bus : <strong className="text-slate-800">{Math.round(item.cupsConsumed * 10) / 10}</strong></span>
+                      <span>•</span>
+                      <span className="text-slate-400">Payé : <strong className="text-slate-600 font-semibold">{formatLastPaidRelative(item.lastPaidDate)}</strong></span>
                     </div>
                   </div>
                 </div>

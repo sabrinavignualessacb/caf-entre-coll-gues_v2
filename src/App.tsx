@@ -365,7 +365,7 @@ export default function App() {
         {/* TAB 1: DASHBOARD / TOURNÉES */}
         {activeTab === 'dashboard' && (
           <div className="space-y-2.5 sm:space-y-3.5">
-            {/* Weekly Calendar above Next Payer */}
+            {/* 1. Weekly Calendar: Immediate visual verification of today's round */}
             <WeeklyCalendar
               rounds={rounds}
               settings={settings}
@@ -374,7 +374,7 @@ export default function App() {
               onAddRoundForDate={handleOpenAddRoundForDate}
             />
 
-            {/* Spotlight Card: Next Payer */}
+            {/* 2. Spotlight Card: Next Payer with Transparent Justification and Cumulative Counters */}
             <NextPayerCard
               balances={balances}
               settings={settings}
@@ -382,6 +382,15 @@ export default function App() {
               onSelectPayer={handleOpenAddRoundForPayer}
               colleagues={colleagues}
               onOpenFullWheel={() => setIsWheelOpen(true)}
+            />
+
+            {/* 3. Cumulative Balances and Accounts of the Team directly accessible on Dashboard */}
+            <LeaderboardCard
+              balances={balances}
+              settings={settings}
+              theme={theme}
+              onSelectPayer={handleOpenAddRoundForPayer}
+              onToggleStatus={handleToggleColleagueStatus}
             />
           </div>
         )}
