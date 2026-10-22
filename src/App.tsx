@@ -362,9 +362,9 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 1: DASHBOARD / TOURNÉES */}
+        {/* TAB 1: DASHBOARD / TOURNÉES (100% ZÉRO SCROLL SUR MOBILE) */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-2.5 sm:space-y-3.5">
+          <div className="space-y-2 sm:space-y-3">
             {/* 1. Weekly Calendar: Immediate visual verification of today's round */}
             <WeeklyCalendar
               rounds={rounds}
@@ -374,7 +374,7 @@ export default function App() {
               onAddRoundForDate={handleOpenAddRoundForDate}
             />
 
-            {/* 2. Spotlight Card: Next Payer with Transparent Justification and Cumulative Counters */}
+            {/* 2. Spotlight Card: Next Payer with Transparent Justification, Tie Wheel & Cumulative Counters */}
             <NextPayerCard
               balances={balances}
               settings={settings}
@@ -384,36 +384,31 @@ export default function App() {
               onOpenFullWheel={() => setIsWheelOpen(true)}
             />
 
-            {/* 3. Cumulative Balances and Accounts of the Team directly accessible on Dashboard */}
-            <LeaderboardCard
-              balances={balances}
-              settings={settings}
-              theme={theme}
-              onSelectPayer={handleOpenAddRoundForPayer}
-              onToggleStatus={handleToggleColleagueStatus}
-            />
+            {/* Quick direct shortcut to the complete balances tab */}
+            <div className="text-center pt-0.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab('colleagues')}
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors py-1 px-3 rounded-full hover:bg-slate-200/60 cursor-pointer"
+              >
+                <span>Voir le tableau complet des soldes & comptes ({balances.length})</span>
+                <span className="text-slate-400">→</span>
+              </button>
+            </div>
           </div>
         )}
 
-        {/* TAB 2: BALANCES & COMPTES */}
-        {activeTab === 'balances' && (
-          <div className="space-y-2.5 sm:space-y-4">
-            <LeaderboardCard
-              balances={balances}
-              settings={settings}
-              theme={theme}
-              onSelectPayer={handleOpenAddRoundForPayer}
-              onToggleStatus={handleToggleColleagueStatus}
-            />
-          </div>
-        )}
-
-        {/* TAB 3: COLLÈGUES */}
-        {activeTab === 'colleagues' && (
+        {/* TAB 2: COLLÈGUES & SOLDES CUMULÉS */}
+        {(activeTab === 'colleagues' || activeTab === 'balances') && (
           <ColleaguesTab
             colleagues={colleagues}
             balances={balances}
+            settings={settings}
+            theme={theme}
+            onSelectPayer={handleOpenAddRoundForPayer}
+            onToggleStatus={handleToggleColleagueStatus}
             onOpenInitialBase={() => setIsInitialBaseOpen(true)}
+            defaultView="balances"
           />
         )}
 

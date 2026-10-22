@@ -110,27 +110,27 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 border border-slate-200 shadow-xs space-y-2">
+    <div className="bg-white rounded-2xl sm:rounded-3xl p-2 sm:p-3 border border-slate-200 shadow-xs space-y-1.5">
       {/* Header & Controls */}
-      <div className="flex items-center justify-between gap-1.5 pb-1.5 border-b border-slate-100 flex-wrap">
+      <div className="flex items-center justify-between gap-1.5 pb-1 border-b border-slate-100 flex-wrap">
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left min-w-0"
         >
-          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-            <Calendar className="w-3.5 h-3.5 text-amber-700" />
+          <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-slate-700" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1 font-bold text-xs text-slate-800">
-              <span className="truncate">Calendrier des Tournées</span>
+              <span className="truncate">Calendrier</span>
               <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.2 rounded font-medium shrink-0">
                 {totalWeeklyCups} ☕ cette semaine
               </span>
               {isCollapsed ? <ChevronDown className="w-3 h-3 text-slate-400" /> : <ChevronUp className="w-3 h-3 text-slate-400" />}
             </div>
-            <p className="text-[9px] text-slate-400 truncate">
-              Vérifiez en un clin d’œil si la tournée du jour a été enregistrée
+            <p className="text-[9px] text-slate-500 truncate">
+              Vérifiez la saisie de la tournée du jour
             </p>
           </div>
         </button>
@@ -140,7 +140,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
           <button
             type="button"
             onClick={() => setShowWeekend(!showWeekend)}
-            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-900 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer"
+            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200 transition-all cursor-pointer"
             title={showWeekend ? "Masquer le week-end" : "Afficher le week-end"}
           >
             {showWeekend ? '7j' : '5j'}
@@ -181,11 +181,11 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
       {/* Prominent Visual Indicator for Today's Round */}
       <div className="w-full">
         {todayRounds.length > 0 ? (
-          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 text-xs">
+          <div className="flex items-center justify-between gap-1.5 px-2 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 text-[11px] sm:text-xs">
             <div className="flex items-center gap-1.5 min-w-0">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span className="truncate">
-                <strong>Tournée du jour bien saisie !</strong> {todayCups} café{todayCups > 1 ? 's' : ''} payé{todayCups > 1 ? 's' : ''} par <strong>{todayPayers.join(', ')}</strong>
+                <strong>Tournée du jour bien saisie !</strong> {todayCups} ☕ par <strong>{todayPayers.join(', ')}</strong>
               </span>
             </div>
             <button
@@ -194,23 +194,23 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
               className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline shrink-0 cursor-pointer"
               title="Ajouter un autre café aujourd'hui"
             >
-              + Autre tournée
+              + Autre
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs">
+          <div className="flex items-center justify-between gap-1.5 px-2 py-1 rounded-xl bg-slate-100/80 border border-slate-200 text-slate-800 text-[11px] sm:text-xs">
             <div className="flex items-center gap-1.5 min-w-0">
-              <Coffee className="w-4 h-4 text-amber-600 shrink-0" />
-              <span className="truncate text-amber-800">
-                <strong>Aujourd'hui :</strong> pas encore de tournée enregistrée
+              <Coffee className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span className="truncate text-slate-700">
+                <strong>Aujourd'hui :</strong> pas encore de tournée
               </span>
             </div>
             <button
               type="button"
               onClick={() => onAddRoundForDate(todayStr)}
-              className="px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[10px] shrink-0 transition-colors shadow-xs cursor-pointer flex items-center gap-1"
+              className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shrink-0 transition-colors shadow-xs cursor-pointer flex items-center gap-1"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-3 h-3 text-white" />
               <span>Saisir le café du jour</span>
             </button>
           </div>
@@ -249,13 +249,13 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
                     ? `Modifier la tournée du ${dateDisplay} (${cupsCount} café${cupsCount > 1 ? 's' : ''}${firstPayer ? ` par ${firstPayer}` : ''})`
                     : `Saisir une tournée pour le ${dateDisplay}`
                 }
-                className={`p-1 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center relative min-h-[68px] sm:min-h-[74px] ${
+                className={`p-1 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center relative min-h-[54px] sm:min-h-[66px] ${
                   isSelected
                     ? 'bg-slate-900 border-slate-900 text-white shadow-md ring-2 ring-emerald-400'
                     : isToday
                     ? cupsCount > 0
                       ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/50 text-slate-900 shadow-xs'
-                      : 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300 text-slate-900'
+                      : 'bg-slate-50 border-slate-300 ring-1 ring-slate-300 text-slate-900'
                     : cupsCount > 0
                     ? 'bg-emerald-50/50 border-emerald-200 text-slate-900 hover:bg-emerald-100/60 shadow-xs'
                     : 'bg-slate-50/60 border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -274,7 +274,7 @@ export const WeeklyCalendar: React.FC<WeeklyCalendarProps> = ({
                 </div>
 
                 {/* Date DD/MM Format */}
-                <div className={`text-[10px] sm:text-[11px] font-black font-mono my-0.2 tracking-tight whitespace-nowrap ${isSelected ? 'text-amber-300' : 'text-slate-900'}`}>
+                <div className={`text-[10px] sm:text-[11px] font-black font-mono my-0.2 tracking-tight whitespace-nowrap ${isSelected ? 'text-white font-bold' : 'text-slate-900'}`}>
                   {dateDisplay}
                 </div>
 

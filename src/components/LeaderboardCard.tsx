@@ -62,7 +62,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
             {titlePrefix ? `${titlePrefix} ` : ''}Soldes & Comptes Cumulés
           </h3>
           <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-            <History className="w-3 h-3 text-amber-500 inline shrink-0" />
+            <History className="w-3 h-3 text-slate-500 inline shrink-0" />
             <span>Historique permanent • Ne repart jamais à zéro chaque jour</span>
           </p>
         </div>
@@ -139,7 +139,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
                       }
                       className={`absolute -top-1 -right-1 w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-bold border shadow-xs ${
                         isHoliday
-                          ? 'bg-amber-500 text-white border-white'
+                          ? 'bg-slate-600 text-white border-white'
                           : 'bg-slate-800 text-white border-white'
                       }`}
                       title={isHoliday ? 'De retour de congé (cliquer pour activer)' : 'Mettre en congé 🏖️'}
@@ -155,8 +155,8 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
                         {item.colleague.name}
                       </h4>
                       {isHoliday && (
-                        <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold shrink-0" title={holidayPeriodText || ''}>
-                          <Palmtree className="w-2.5 h-2.5 text-amber-600" />
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[9px] font-bold shrink-0 border border-slate-200" title={holidayPeriodText || ''}>
+                          <Palmtree className="w-2.5 h-2.5 text-slate-500" />
                           <span>Congé</span>
                         </span>
                       )}
@@ -222,7 +222,7 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
                       className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-900 hover:bg-slate-800 text-white transition-colors"
                       title={`Saisir que ${item.colleague.name} paie le café`}
                     >
-                      <Plus className="w-3.5 h-3.5 text-amber-400" />
+                      <Plus className="w-3.5 h-3.5 text-white" />
                     </button>
                   </div>
                 </div>

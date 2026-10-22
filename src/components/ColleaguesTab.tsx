@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
-import { Colleague, ColleagueBalance } from '../types';
+import { Colleague, ColleagueBalance, GroupSettings } from '../types';
 import { addColleague, updateColleague, deleteColleague } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
 import { compressAvatarImage } from '../utils/imageUtils';
 import { isColleagueOnHoliday, getColleagueHolidayInfo, formatHolidayPeriod, getLocalDateStr } from '../utils/colleagueUtils';
-import { Users, UserPlus, Palmtree, Trash2, Edit3, Check, Sparkles, Database, Upload, Image as ImageIcon, X, Loader2, Calendar, Info, Clock, RotateCcw } from 'lucide-react';
+import { LeaderboardCard } from './LeaderboardCard';
+import { ThemeConfig } from '../lib/themes';
+import { Users, UserPlus, Palmtree, Trash2, Edit3, Check, Sparkles, Database, Upload, Image as ImageIcon, X, Loader2, Calendar, Info, Clock, RotateCcw, Scale } from 'lucide-react';
 
 interface ColleaguesTabProps {
   colleagues: Colleague[];
   balances: ColleagueBalance[];
+  settings: GroupSettings;
+  theme: ThemeConfig;
+  onSelectPayer: (colleagueId: string) => void;
+  onToggleStatus: (colleagueId: string, currentStatus: string) => void;
   onOpenInitialBase?: () => void;
+  defaultView?: 'balances' | 'manage';
 }
 
 const AVATAR_OPTIONS = ['☕', '👨‍💻', '👩‍💼', '👨‍🔬', '👩‍🎨', '👨‍🏫', '👩‍⚕️', '👨‍🍳', '🦊', '🐻', '🦁', '🦉', '🐱', '🚀', '⚡', '☕️'];
@@ -17,8 +24,14 @@ const AVATAR_OPTIONS = ['☕', '👨‍💻', '👩‍💼', '👨‍🔬', '�
 export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
   colleagues,
   balances,
+  settings,
+  theme,
+  onSelectPayer,
+  onToggleStatus,
   onOpenInitialBase,
+  defaultView = 'balances',
 }) => {
+  const [viewMode, setViewMode] = useState<'balances' | 'manage'>(defaultView);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('☕');
@@ -158,46 +171,103 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
 
   return (
     <div className="space-y-2.5 sm:space-y-3.5">
-      {/* Top Banner for Initial Import */}
-      {onOpenInitialBase && (
-        <div className="bg-slate-800 text-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-700 shadow-md flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-slate-700 text-emerald-400 border border-slate-600 shrink-0">
-              <Database className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-bold text-xs sm:text-sm text-white truncate">Base Initiale / Historique</h3>
-              <p className="text-[10px] sm:text-xs text-slate-300 truncate">
-                Partir de vos vrais comptes existants
-              </p>
-            </div>
+      {/* Sub-tab Navigation */}
+      <div className="flex items-center bg-slate-200/80 p-1 rounded-2xl border border-slate-300/80">
+        <button
+          type="button"
+          onClick={() => setViewMode('balances')}
+          className={`flex-1 py-1.5 sm:py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            viewMode === 'balances'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:text-slate-900'
+          }`}
+        >
+          <Scale className="w-3.5 h-3.5" />
+          <span>Soldes & Comptes Cumulés</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setViewMode('manage')}
+          className={`flex-1 py-1.5 sm:py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            viewMode === 'manage'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Membres & Photos ({colleagues.length})</span>
+        </button>
+      </div>
+
+      {/* VIEW 1: SOLDES & COMPTES CUMULÉS */}
+      {viewMode === 'balances' && (
+        <div className="space-y-2.5 sm:space-y-3">
+          <LeaderboardCard
+            balances={balances}
+            settings={settings}
+            theme={theme}
+            onSelectPayer={onSelectPayer}
+            onToggleStatus={onToggleStatus}
+          />
+
+          <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs shadow-xs">
+            <span className="text-slate-600 font-medium">Gérer les membres, photos de profil et dates de congé :</span>
+            <button
+              type="button"
+              onClick={() => setViewMode('manage')}
+              className="font-bold text-slate-900 hover:text-emerald-700 underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+            >
+              <span>Gérer les membres</span>
+              <span>→</span>
+            </button>
           </div>
-          <button
-            onClick={onOpenInitialBase}
-            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition-all shrink-0"
-          >
-            Saisir
-          </button>
         </div>
       )}
 
-      {/* Top Title & Add Button */}
-      <div className="flex items-center justify-between bg-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs">
-        <div>
-          <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-slate-700" />
-            Collègues ({colleagues.length})
-          </h2>
-        </div>
+      {/* VIEW 2: GESTION DES MEMBRES, PHOTOS & CONGÉS */}
+      {viewMode === 'manage' && (
+        <div className="space-y-2.5 sm:space-y-3.5 animate-in fade-in duration-150">
+          {/* Top Banner for Initial Import */}
+          {onOpenInitialBase && (
+            <div className="bg-slate-800 text-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-700 shadow-md flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl bg-slate-700 text-emerald-400 border border-slate-600 shrink-0">
+                  <Database className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-xs sm:text-sm text-white truncate">Base Initiale / Historique</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-300 truncate">
+                    Partir de vos vrais comptes existants
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onOpenInitialBase}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition-all shrink-0 cursor-pointer"
+              >
+                Saisir
+              </button>
+            </div>
+          )}
 
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition-all active:scale-95 shadow-xs"
-        >
-          <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Ajouter</span>
-        </button>
-      </div>
+          {/* Top Title & Add Button */}
+          <div className="flex items-center justify-between bg-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs">
+            <div>
+              <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-slate-700" />
+                Collègues ({colleagues.length})
+              </h2>
+            </div>
+
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition-all active:scale-95 shadow-xs cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Ajouter</span>
+            </button>
+          </div>
 
       {/* Add Colleague Form Box */}
       {showAddForm && (
@@ -591,7 +661,7 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
 
                       <button
                         onClick={() => handleDelete(col.id, col.name)}
-                        className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                         title="Supprimer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -605,5 +675,7 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
         )}
       </div>
     </div>
+  )}
+</div>
   );
 };

@@ -43,8 +43,8 @@ export const Header: React.FC<HeaderProps> = ({
               {settings.groupName || 'Pause Café Équipe'}
             </h1>
             <div className={`flex items-center gap-1.5 text-[10px] sm:text-xs ${theme.headerSubtext}`}>
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              <span className="font-semibold text-amber-400">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-semibold text-emerald-400">
                 {isSyncing ? 'Sync...' : 'En direct'}
               </span>
               <span className="opacity-40">•</span>
@@ -59,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl ${theme.headerIconBg} hover:opacity-90 text-slate-300 hover:text-white transition-all border flex items-center gap-1 text-xs font-medium`}
             title="Saisir ma base initiale"
           >
-            <Database className="w-3.5 h-3.5 text-amber-400" />
+            <Database className="w-3.5 h-3.5 text-slate-200" />
             <span className="hidden md:inline">Base</span>
           </button>
 
@@ -68,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
             className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl ${theme.headerIconBg} hover:opacity-90 text-slate-300 hover:text-white transition-all border flex items-center gap-1 text-xs font-medium`}
             title="Réglages et thèmes"
           >
-            <Palette className="w-3.5 h-3.5 text-amber-400" />
+            <Palette className="w-3.5 h-3.5 text-slate-200" />
             <span className="hidden sm:inline text-xs font-semibold">Style</span>
           </button>
 
@@ -83,54 +83,42 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <nav className={`border-t ${theme.headerBorder} px-1 sm:px-4 bg-black/10 backdrop-blur-xs w-full overflow-x-hidden`}>
+      {/* Tab Navigation (3 spacious tabs, no cramped text on mobile) */}
+      <nav className={`border-t ${theme.headerBorder} px-2 sm:px-4 bg-black/10 backdrop-blur-xs w-full overflow-x-hidden`}>
         <div className="max-w-xl mx-auto flex justify-around">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex-1 py-2 sm:py-2.5 px-1 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1 sm:gap-1.5 transition-colors uppercase tracking-wider ${
+            className={`flex-1 py-2 sm:py-2.5 px-2 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider cursor-pointer ${
               activeTab === 'dashboard'
                 ? `${theme.tabActiveBorder} ${theme.tabActiveText}`
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            <Coffee className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <Coffee className="w-4 h-4 shrink-0" />
             <span>Tournées</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('balances')}
-            className={`flex-1 py-2 sm:py-2.5 px-1 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1 sm:gap-1.5 transition-colors uppercase tracking-wider ${
-              activeTab === 'balances'
-                ? `${theme.tabActiveBorder} ${theme.tabActiveText}`
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Scale className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            <span>Balances</span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('colleagues')}
-            className={`flex-1 py-2 sm:py-2.5 px-1 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1 sm:gap-1.5 transition-colors uppercase tracking-wider ${
-              activeTab === 'colleagues'
+            className={`flex-1 py-2 sm:py-2.5 px-2 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider cursor-pointer ${
+              activeTab === 'colleagues' || activeTab === 'balances'
                 ? `${theme.tabActiveBorder} ${theme.tabActiveText}`
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            <span>Collègues</span>
+            <Users className="w-4 h-4 shrink-0" />
+            <span>Collègues & Soldes</span>
           </button>
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 sm:py-2.5 px-1 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1 sm:gap-1.5 transition-colors uppercase tracking-wider ${
+            className={`flex-1 py-2 sm:py-2.5 px-2 text-center font-bold text-xs border-b-2 flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider cursor-pointer ${
               activeTab === 'history'
                 ? `${theme.tabActiveBorder} ${theme.tabActiveText}`
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <History className="w-4 h-4 shrink-0" />
             <span>Journal</span>
           </button>
         </div>

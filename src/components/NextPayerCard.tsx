@@ -336,7 +336,7 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                         )
                       }
                       disabled={isResetting}
-                      className="w-full text-left px-3 py-2 bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer disabled:opacity-50"
+                      className="w-full text-left px-3 py-2 bg-slate-700/60 border border-slate-600 text-slate-200 hover:bg-slate-700 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer disabled:opacity-50"
                       title={`Régulariser et remettre à zéro le compteur de ${activePayer.colleague.name}`}
                     >
                       <span>Régulariser à 0 🔄</span>
@@ -369,7 +369,7 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                           }}
                           className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-xs border cursor-pointer ${
                             isCurrent
-                              ? 'bg-amber-500/20 border-amber-500/50 text-white font-bold ring-1 ring-amber-500/40'
+                              ? 'bg-purple-600/30 border-purple-500/60 text-white font-bold ring-1 ring-purple-400/40'
                               : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 hover:border-slate-600 text-slate-200'
                           }`}
                         >
@@ -394,7 +394,7 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                             <span
                               className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-md ${
                                 b.netCupsBalance < 0
-                                  ? 'bg-rose-500/20 text-rose-300'
+                                   ? 'bg-rose-500/20 text-rose-300'
                                   : b.netCupsBalance > 0
                                   ? 'bg-emerald-500/20 text-emerald-300'
                                   : 'bg-slate-700 text-slate-300'
@@ -403,7 +403,7 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                               {b.netCupsBalance > 0 ? `+${b.netCupsBalance}` : b.netCupsBalance} ☕
                             </span>
                             {isCurrent ? (
-                              <Check className="w-4 h-4 text-amber-400" />
+                              <Check className="w-4 h-4 text-emerald-400" />
                             ) : (
                               <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
                             )}
@@ -433,21 +433,21 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
 
   return (
     <>
-      <div className={`${theme.spotlightBg} rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden flex flex-col items-center text-center border ${theme.spotlightBorder} transition-all duration-200`}>
+      <div className={`${theme.spotlightBg} rounded-2xl sm:rounded-3xl p-2.5 sm:p-4 shadow-lg relative overflow-hidden flex flex-col items-center text-center border ${theme.spotlightBorder} transition-all duration-200`}>
         {/* Decorative ambient background accents */}
         <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
 
         {/* Top Bar: Badge, Justification & Actions */}
-        <div className="w-full flex items-center justify-between gap-2 mb-2">
+        <div className="w-full flex items-center justify-between gap-1.5 mb-1.5">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${theme.spotlightBadgeBg} border ${theme.spotlightBadgeBorder} ${theme.spotlightBadgeText} text-[10px] sm:text-[11px] uppercase tracking-wider font-bold`}>
-              <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${theme.spotlightBadgeBg} border ${theme.spotlightBadgeBorder} ${theme.spotlightBadgeText} text-[10px] sm:text-[11px] uppercase tracking-wider font-bold`}>
+              <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
               <span>{isTie && !wheelWinner ? 'Égalité au tour' : 'Prochaine Tournée'}</span>
             </span>
 
             {/* Tie Indicator or Justification Pill */}
             {isTie && !wheelWinner ? (
-              <span className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
+              <span className="bg-purple-500/25 text-purple-200 border border-purple-400/40 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
                 {tiedCandidates.length} à égalité ({minCups} ☕)
               </span>
             ) : (
@@ -464,10 +464,10 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
               <button
                 type="button"
                 onClick={onOpenFullWheel}
-                className="text-[10px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 px-2 py-1 rounded-full flex items-center gap-1 transition-all font-semibold cursor-pointer"
+                className="text-[10px] text-purple-200 hover:text-white bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 px-2 py-0.5 rounded-full flex items-center gap-1 transition-all font-semibold cursor-pointer"
                 title="Ouvrir la roue avec tous les collègues"
               >
-                <Dices className="w-3 h-3 text-amber-400" />
+                <Dices className="w-3 h-3 text-purple-300" />
                 <span className="hidden xs:inline">Roue complète</span>
               </button>
             )}
@@ -475,10 +475,10 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
             <button
               type="button"
               onClick={() => setShowOverridePicker(true)}
-              className="text-[10px] text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 px-2.5 py-1 rounded-full flex items-center gap-1 transition-all font-medium cursor-pointer"
+              className="text-[10px] text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 px-2 py-0.5 rounded-full flex items-center gap-1 transition-all font-medium cursor-pointer"
               title="Changer manuellement de payeur"
             >
-              <UserX className="w-3 h-3 text-amber-400" />
+              <UserX className="w-3 h-3 text-slate-300" />
               <span>Changer</span>
               <ChevronDown className="w-3 h-3" />
             </button>
@@ -489,22 +489,22 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
         {/* CASE 1: TIE DETECTED AND NO WINNER YET -> DISPLAY THE WHEEL DIRECTLY!     */}
         {/* ========================================================================= */}
         {isTie && !wheelWinner ? (
-          <div className="w-full my-1 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
-            <p className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-amber-300 mb-1 flex items-center gap-1.5">
-              <Dices className={`w-4 h-4 text-amber-400 ${isSpinning ? 'animate-spin' : ''}`} />
-              <span>Égalité entre {tiedCandidates.map((c) => c.colleague.name).join(' & ')}</span>
+          <div className="w-full my-0.5 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+            <p className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-white mb-0.5 flex items-center gap-1.5">
+              <Dices className={`w-3.5 h-3.5 text-purple-400 ${isSpinning ? 'animate-spin' : ''}`} />
+              <span>Égalité : {tiedCandidates.map((c) => c.colleague.name).join(' & ')}</span>
             </p>
 
-            <p className="text-[11px] text-slate-300 mb-2 text-center max-w-sm">
-              {tiedCandidates.length} collègues sont à égalité ({minCups} ☕). Faites tourner la roue pour désigner qui paie la tournée !
+            <p className="text-[10px] sm:text-[11px] text-slate-300 mb-1.5 text-center max-w-sm">
+              {tiedCandidates.length} collègues à égalité ({minCups} ☕). Tournez la roue pour désigner qui paie !
             </p>
 
             {/* Interactive SVG Wheel Container */}
-            <div className="relative my-1">
+            <div className="relative my-0.5">
               {/* Top Pointer Arrow */}
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[14px] border-t-amber-400 drop-shadow-md" />
+              <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[12px] border-t-purple-400 drop-shadow-md" />
 
-              <div className="w-40 h-40 sm:w-48 sm:h-48 relative rounded-full p-1.5 bg-slate-900 border-2 border-amber-400/80 shadow-2xl flex items-center justify-center overflow-hidden">
+              <div className="w-32 h-32 sm:w-44 sm:h-44 relative rounded-full p-1 bg-slate-900 border-2 border-purple-500/80 shadow-2xl flex items-center justify-center overflow-hidden">
                 <svg
                   viewBox="0 0 200 200"
                   className="w-full h-full rounded-full transition-transform ease-out"
@@ -532,13 +532,13 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                     const midAngle = startAngle + sliceAngle / 2;
 
                     const WHEEL_COLORS = [
-                      '#f59e0b', // amber-500
+                      '#6366f1', // indigo-500
                       '#10b981', // emerald-500
                       '#3b82f6', // blue-500
                       '#8b5cf6', // purple-500
                       '#ec4899', // pink-500
                       '#06b6d4', // cyan-500
-                      '#f97316', // orange-500
+                      '#0284c7', // sky-600
                       '#14b8a6', // teal-500
                     ];
                     const fillColor = WHEEL_COLORS[i % WHEEL_COLORS.length];
@@ -570,33 +570,33 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                   type="button"
                   onClick={handleSpinTieWheel}
                   disabled={isSpinning}
-                  className="absolute w-11 h-11 rounded-full bg-slate-900 border-2 border-amber-400 shadow-xl flex items-center justify-center z-10 active:scale-95 hover:bg-slate-800 transition-all cursor-pointer"
+                  className="absolute w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-slate-900 border-2 border-purple-400 shadow-xl flex items-center justify-center z-10 active:scale-95 hover:bg-slate-800 transition-all cursor-pointer"
                   title="Tourner la roue"
                 >
-                  <Dices className={`w-5 h-5 text-amber-400 ${isSpinning ? 'animate-spin' : ''}`} />
+                  <Dices className={`w-4 h-4 sm:w-5 sm:h-5 text-purple-300 ${isSpinning ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             </div>
 
             {/* Action Spin Button & Direct Pick */}
-            <div className="w-full mt-3 max-w-sm space-y-2">
+            <div className="w-full mt-2 max-w-sm space-y-1.5">
               <button
                 type="button"
                 onClick={handleSpinTieWheel}
                 disabled={isSpinning}
-                className={`w-full py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer ${
+                className={`w-full py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer ${
                   isSpinning
                     ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 active:scale-98 shadow-amber-500/25'
+                    : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white active:scale-98 shadow-purple-600/30'
                 }`}
               >
-                <Sparkles className={`w-4 h-4 ${isSpinning ? 'animate-spin' : ''}`} />
-                <span>{isSpinning ? 'Tirage au sort en cours...' : '🎲 Tourner la Roue pour départager'}</span>
+                <Sparkles className={`w-3.5 h-3.5 ${isSpinning ? 'animate-spin' : ''}`} />
+                <span>{isSpinning ? 'Tirage au sort...' : '🎲 Tourner la Roue'}</span>
               </button>
 
               {/* Quick direct selection buttons */}
-              <div className="flex items-center justify-center gap-1.5 pt-0.5 flex-wrap">
-                <span className="text-[10px] text-slate-300 font-medium">Ou désigner directement :</span>
+              <div className="flex items-center justify-center gap-1 pt-0.5 flex-wrap">
+                <span className="text-[10px] text-slate-300 font-medium">Ou désigner :</span>
                 {tiedCandidates.map((c) => (
                   <button
                     key={c.colleague.id}
@@ -616,10 +616,10 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
           /* CASE 2: SINGLE CANDIDATE OR WHEEL WINNER CHOSEN                           */
           /* ========================================================================= */
           <div className="my-0.5 flex flex-col items-center w-full max-w-md animate-in fade-in duration-200">
-            <p className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${theme.spotlightTitle} mb-1 flex items-center gap-1.5`}>
+            <p className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-wider ${theme.spotlightTitle} mb-0.5 flex items-center gap-1`}>
               {wheelWinner ? (
-                <span className="text-amber-300 flex items-center gap-1 justify-center animate-bounce">
-                  <Trophy className="w-4 h-4 text-amber-400" />
+                <span className="text-purple-300 flex items-center gap-1 justify-center animate-bounce">
+                  <Trophy className="w-3.5 h-3.5 text-purple-400" />
                   Désigné(e) par la roue :
                 </span>
               ) : (
@@ -632,19 +632,19 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
               <UserAvatar
                 avatar={activePayer.colleague.avatar}
                 name={activePayer.colleague.name}
-                sizeClassName="w-16 h-16 sm:w-20 sm:h-20 text-3xl sm:text-4xl"
-                className="ring-3 ring-amber-400/80 shadow-xl bg-white/10"
+                sizeClassName="w-13 h-13 sm:w-16 sm:h-16 text-2xl sm:text-3xl"
+                className="ring-2 sm:ring-3 ring-emerald-400/80 shadow-xl bg-white/10"
               />
             </div>
 
             {/* Centered Name */}
-            <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${theme.spotlightName} my-0.5 drop-shadow-xs`}>
+            <h2 className={`text-lg sm:text-xl font-black tracking-tight ${theme.spotlightName} my-0.2 drop-shadow-xs`}>
               {activePayer.colleague.name}
             </h2>
 
             {/* Net Balance Status */}
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`text-xs sm:text-sm font-extrabold ${theme.spotlightOweText}`}>
+            <div className="flex items-center gap-1.5 mb-1 text-xs">
+              <div className={`font-extrabold ${theme.spotlightOweText}`}>
                 {activePayer.netCupsBalance < 0 ? (
                   <span>-{oweCups} café{oweCups > 1 ? 's' : ''}</span>
                 ) : activePayer.netCupsBalance > 0 ? (
@@ -661,32 +661,31 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
               </span>
             </div>
 
-            {/* CUMULATIVE COUNTERS CARD (Compteurs Cumulés Permanents) */}
-            <div className="w-full bg-black/20 border border-white/15 rounded-xl p-2.5 my-1 text-left space-y-1.5 text-white">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-amber-300 border-b border-white/10 pb-1">
+            {/* CUMULATIVE COUNTERS CARD (Compteurs Cumulés Permanents en 1 seule ligne compacte) */}
+            <div className="w-full bg-black/25 border border-white/15 rounded-xl p-2 my-0.5 text-left space-y-1 text-white">
+              <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-white/10 pb-0.5">
                 <span className="flex items-center gap-1">
-                  <History className="w-3 h-3 text-amber-400" />
-                  Compteurs cumulés de {activePayer.colleague.name}
+                  <History className="w-3 h-3 text-slate-300" />
+                  Comptes cumulés de {activePayer.colleague.name}
                 </span>
-                <span className="text-slate-400 font-normal lowercase">historique global</span>
+                <span className="text-slate-400 font-normal lowercase text-[9px]">permanent</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center text-[11px]">
-                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Payés au total</span>
-                  <span className="font-extrabold text-amber-300 text-xs sm:text-sm">{activePayer.cupsPaid} ☕</span>
-                  <span className="text-[9px] text-slate-400 block font-medium">({activePayer.roundsPaidCount} tournée{activePayer.roundsPaidCount > 1 ? 's' : ''})</span>
+              {/* 4 Metrics in a single compact row */}
+              <div className="grid grid-cols-4 gap-1 text-center">
+                <div className="bg-white/5 rounded-lg p-1 border border-white/5">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-slate-400 block leading-tight">Payés</span>
+                  <span className="font-extrabold text-white text-xs">{activePayer.cupsPaid} ☕</span>
                 </div>
 
-                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Bus au total</span>
-                  <span className="font-extrabold text-slate-200 text-xs sm:text-sm">{Math.round(activePayer.cupsConsumed * 10) / 10} ☕</span>
-                  <span className="text-[9px] text-slate-400 block font-medium">({activePayer.roundsBenefitedCount} reçus)</span>
+                <div className="bg-white/5 rounded-lg p-1 border border-white/5">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-slate-400 block leading-tight">Bus</span>
+                  <span className="font-extrabold text-slate-200 text-xs">{Math.round(activePayer.cupsConsumed * 10) / 10} ☕</span>
                 </div>
 
-                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Solde net</span>
-                  <span className={`font-black text-xs sm:text-sm ${
+                <div className="bg-white/5 rounded-lg p-1 border border-white/5">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-slate-400 block leading-tight">Solde</span>
+                  <span className={`font-black text-xs ${
                     activePayer.netCupsBalance < 0
                       ? 'text-rose-400'
                       : activePayer.netCupsBalance > 0
@@ -695,34 +694,28 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                   }`}>
                     {activePayer.netCupsBalance > 0 ? `+${activePayer.netCupsBalance}` : activePayer.netCupsBalance} ☕
                   </span>
-                  <span className="text-[9px] text-slate-400 block font-medium">
-                    {activePayer.netCupsBalance < 0 ? 'En retard' : activePayer.netCupsBalance > 0 ? 'En avance' : 'Équilibré'}
-                  </span>
                 </div>
 
-                <div className="bg-white/5 rounded-lg p-1.5 border border-white/5">
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Dernier paiement</span>
-                  <span className="font-bold text-slate-200 text-[10px] sm:text-[11px] block mt-0.5 truncate" title={activePayer.lastPaidDate || 'Jamais'}>
+                <div className="bg-white/5 rounded-lg p-1 border border-white/5">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-slate-400 block leading-tight">Dernier</span>
+                  <span className="font-bold text-slate-200 text-[10px] block truncate" title={activePayer.lastPaidDate || 'Jamais'}>
                     {formatLastPaidRelative(activePayer.lastPaidDate)}
-                  </span>
-                  <span className="text-[8px] text-slate-400 block">
-                    {activePayer.lastPaidDate ? formatDateFR(activePayer.lastPaidDate) : 'aucun'}
                   </span>
                 </div>
               </div>
 
               {/* Clear Why Justification Explanation */}
-              <div className="flex items-start gap-1.5 pt-1 text-[10px] sm:text-[11px] text-slate-300 bg-white/5 p-1.5 rounded-lg border border-white/5">
-                <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <span className="leading-tight">
-                  <strong className="text-amber-300 font-semibold">Pourquoi {activePayer.colleague.name} ?</strong>{' '}
+              <div className="flex items-center gap-1.5 pt-0.5 text-[9px] sm:text-[10px] text-slate-300">
+                <Info className="w-3 h-3 text-slate-300 shrink-0" />
+                <span className="truncate">
+                  <strong className="text-white font-semibold">Pourquoi lui/elle ?</strong>{' '}
                   {justification.detail}
                 </span>
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="w-full mt-2 pt-2 border-t border-white/15 flex items-center gap-2">
+            <div className="w-full mt-1.5 pt-1.5 border-t border-white/15 flex items-center gap-2">
               {isTie && (
                 <button
                   type="button"
@@ -730,21 +723,21 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                     setWheelWinner(null);
                     setRotationDegree(0);
                   }}
-                  className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shrink-0 cursor-pointer"
+                  className="py-2 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1 transition-all shrink-0 cursor-pointer"
                   title="Faire tourner à nouveau la roue pour départager"
                 >
-                  <RotateCw className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Relancer la Roue</span>
+                  <RotateCw className="w-3.5 h-3.5 text-slate-200" />
+                  <span className="hidden sm:inline">Relancer</span>
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => onSelectPayer(activePayer.colleague.id)}
-                className={`${theme.spotlightBtn} flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer`}
+                className={`${theme.spotlightBtn} flex-1 py-2 sm:py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider shadow-md transition-all active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer`}
               >
                 <span>Saisir la tournée payée par {activePayer.colleague.name}</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

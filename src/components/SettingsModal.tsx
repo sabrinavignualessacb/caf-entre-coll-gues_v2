@@ -97,7 +97,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Header */}
         <div className="bg-slate-900 text-white p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <Settings className="w-5 h-5 text-amber-400" />
+            <Settings className="w-5 h-5 text-white" />
             <h2 className="font-bold text-base text-white">Réglages & Design du Groupe</h2>
           </div>
           <button
@@ -198,7 +198,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="shrink-0 ml-2">
                       {isSelected ? (
-                        <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-xs shadow-xs">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                           ✓
                         </div>
                       ) : (
@@ -217,7 +217,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               disabled={isSaving}
               className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-full shadow-md transition-all flex items-center justify-center gap-2"
             >
-              <Save className="w-4 h-4 text-amber-400" />
+              <Save className="w-4 h-4 text-white" />
               <span>{isSaving ? 'Enregistrement...' : 'Enregistrer le thème & réglages'}</span>
             </button>
           </div>
