@@ -17,13 +17,15 @@ import {
   History,
   Info,
   Scale,
-  Award
+  Award,
+  Palmtree,
 } from 'lucide-react';
 import { ColleagueBalance, GroupSettings, Colleague } from '../types';
 import { updateColleague, resetColleagueCounter } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
 import { ThemeConfig } from '../lib/themes';
 import { isColleagueOnHoliday, formatLastPaidRelative, formatDateFR } from '../utils/colleagueUtils';
+import { HolidayModal } from './HolidayModal';
 
 interface NextPayerCardProps {
   balances: ColleagueBalance[];
@@ -44,6 +46,21 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
 }) => {
   const [showOverridePicker, setShowOverridePicker] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [holidayTargetColleague, setHolidayTargetColleague] = useState<Colleague | null>(null);
+
+  const handleSaveHolidayDates = async (
+    colleagueId: string,
+    startDate: string,
+    endDate: string,
+    status: 'active' | 'holiday'
+  ) => {
+    await updateColleague(colleagueId, {
+      holidayStartDate: startDate,
+      holidayEndDate: endDate,
+      status,
+    });
+    setShowOverridePicker(false);
+  };
 
   // Wheel state for tie breaker
   const [isSpinning, setIsSpinning] = useState(false);
@@ -318,12 +335,15 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
                   <div className="pt-2 border-t border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => handleMarkAbsent(activePayer.colleague.id, activePayer.colleague.name)}
-                      className="w-full text-left px-3 py-2 bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer"
-                      title={`Marquer ${activePayer.colleague.name} comme absent(e) ou en congé`}
+                      onClick={() => setHolidayTargetColleague(activePayer.colleague)}
+                      className="w-full text-left px-3 py-2 bg-purple-500/15 border border-purple-500/30 text-purple-200 hover:bg-purple-500/25 rounded-lg flex items-center justify-between font-semibold transition-colors text-[11px] sm:text-xs cursor-pointer"
+                      title={`Définir la période de congés de ${activePayer.colleague.name} avec retour automatique`}
                     >
-                      <span>Mettre en congé 🏖️</span>
-                      <UserX className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-1.5">
+                        <Palmtree className="w-3.5 h-3.5 text-purple-300" />
+                        <span>Période de congés (auto)</span>
+                      </span>
+                      <Calendar className="w-3.5 h-3.5 text-purple-300" />
                     </button>
 
                     <button
@@ -744,6 +764,12 @@ export const NextPayerCard: React.FC<NextPayerCardProps> = ({
         )}
       </div>
       {overrideModal}
+      <HolidayModal
+        isOpen={Boolean(holidayTargetColleague)}
+        onClose={() => setHolidayTargetColleague(null)}
+        colleague={holidayTargetColleague}
+        onSaveHoliday={handleSaveHolidayDates}
+      />
     </>
   );
 };

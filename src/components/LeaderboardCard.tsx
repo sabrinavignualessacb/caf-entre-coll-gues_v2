@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ColleagueBalance, GroupSettings } from '../types';
+import { ColleagueBalance, GroupSettings, Colleague } from '../types';
 import { Coffee, TrendingDown, TrendingUp, Check, Plus, Palmtree, RotateCcw, Info, History } from 'lucide-react';
-import { resetColleagueCounter } from '../services/coffeeService';
+import { resetColleagueCounter, updateColleague } from '../services/coffeeService';
 import { UserAvatar } from './UserAvatar';
 import { ThemeConfig } from '../lib/themes';
 import { isColleagueOnHoliday, formatHolidayPeriod, formatLastPaidRelative } from '../utils/colleagueUtils';
+import { HolidayModal } from './HolidayModal';
 
 interface LeaderboardCardProps {
   balances: ColleagueBalance[];
@@ -25,6 +26,20 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'holiday'>('all');
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [holidayTargetColleague, setHolidayTargetColleague] = useState<Colleague | null>(null);
+
+  const handleSaveHolidayDates = async (
+    colleagueId: string,
+    startDate: string,
+    endDate: string,
+    status: 'active' | 'holiday'
+  ) => {
+    await updateColleague(colleagueId, {
+      holidayStartDate: startDate,
+      holidayEndDate: endDate,
+      status,
+    });
+  };
 
   // Sort by net cups balance ascending (most indebted first)
   const sorted = [...balances].sort((a, b) => a.netCupsBalance - b.netCupsBalance);
@@ -131,18 +146,13 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
                   <div className="relative shrink-0">
                     <UserAvatar avatar={item.colleague.avatar} name={item.colleague.name} sizeClassName="w-8 h-8 sm:w-10 sm:h-10 text-base sm:text-lg" />
                     <button
-                      onClick={() =>
-                        onToggleStatus(
-                          item.colleague.id,
-                          isHoliday ? 'active' : 'holiday'
-                        )
-                      }
-                      className={`absolute -top-1 -right-1 w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-bold border shadow-xs ${
+                      onClick={() => setHolidayTargetColleague(item.colleague)}
+                      className={`absolute -top-1 -right-1 w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-bold border shadow-xs cursor-pointer ${
                         isHoliday
-                          ? 'bg-slate-600 text-white border-white'
+                          ? 'bg-purple-600 text-white border-white'
                           : 'bg-slate-800 text-white border-white'
                       }`}
-                      title={isHoliday ? 'De retour de congé (cliquer pour activer)' : 'Mettre en congé 🏖️'}
+                      title={isHoliday ? 'Modifier les dates de congé ou réactiver' : 'Définir une période de congés 🏖️'}
                     >
                       {isHoliday ? '🏖️' : '✓'}
                     </button>
@@ -150,15 +160,20 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
 
                   {/* Name & Badges */}
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
                       <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                         {item.colleague.name}
                       </h4>
                       {isHoliday && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[9px] font-bold shrink-0 border border-slate-200" title={holidayPeriodText || ''}>
-                          <Palmtree className="w-2.5 h-2.5 text-slate-500" />
-                          <span>Congé</span>
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setHolidayTargetColleague(item.colleague)}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100/90 text-purple-900 text-[9px] font-bold shrink-0 border border-purple-200 hover:bg-purple-200 transition-colors cursor-pointer"
+                          title={holidayPeriodText ? `${holidayPeriodText} (Cliquer pour modifier)` : 'En congé (Cliquer pour définir les dates)'}
+                        >
+                          <Palmtree className="w-2.5 h-2.5 text-purple-600" />
+                          <span>{holidayPeriodText || 'En congé'}</span>
+                        </button>
                       )}
                     </div>
 
@@ -231,6 +246,14 @@ export const LeaderboardCard: React.FC<LeaderboardCardProps> = ({
           })}
         </div>
       )}
+
+      {/* Dedicated Holiday Management Modal */}
+      <HolidayModal
+        isOpen={Boolean(holidayTargetColleague)}
+        onClose={() => setHolidayTargetColleague(null)}
+        colleague={holidayTargetColleague}
+        onSaveHoliday={handleSaveHolidayDates}
+      />
     </div>
   );
 };

@@ -7,6 +7,7 @@ import { isColleagueOnHoliday, getColleagueHolidayInfo, formatHolidayPeriod, get
 import { LeaderboardCard } from './LeaderboardCard';
 import { ThemeConfig } from '../lib/themes';
 import { Users, UserPlus, Palmtree, Trash2, Edit3, Check, Sparkles, Database, Upload, Image as ImageIcon, X, Loader2, Calendar, Info, Clock, RotateCcw, Scale } from 'lucide-react';
+import { HolidayModal } from './HolidayModal';
 
 interface ColleaguesTabProps {
   colleagues: Colleague[];
@@ -46,6 +47,20 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
 
   const [isCompressing, setIsCompressing] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [holidayTargetColleague, setHolidayTargetColleague] = useState<Colleague | null>(null);
+
+  const handleSaveHolidayDates = async (
+    colleagueId: string,
+    startDate: string,
+    endDate: string,
+    status: 'active' | 'holiday'
+  ) => {
+    await updateColleague(colleagueId, {
+      holidayStartDate: startDate,
+      holidayEndDate: endDate,
+      status,
+    });
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
     const file = e.target.files?.[0];
@@ -118,29 +133,8 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
     }
   };
 
-  const handleToggleHoliday = async (col: Colleague) => {
-    const isOnHol = isColleagueOnHoliday(col);
-    if (isOnHol) {
-      // Returning from holiday
-      try {
-        await updateColleague(col.id, {
-          status: 'active',
-          holidayStartDate: '',
-          holidayEndDate: '',
-        });
-      } catch (err) {
-        console.error('Erreur retour congé:', err);
-      }
-    } else {
-      // Setting on holiday manually
-      try {
-        await updateColleague(col.id, {
-          status: 'holiday',
-        });
-      } catch (err) {
-        console.error('Erreur passage en congé:', err);
-      }
-    }
+  const handleToggleHoliday = (col: Colleague) => {
+    setHolidayTargetColleague(col);
   };
 
   const handleSetPresetDates = (days: number) => {
@@ -577,33 +571,39 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
 
                           {/* Holiday Badges depending on state */}
                           {holidayInfo.state === 'current_period' && (
-                            <span
-                              className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-amber-900 text-[9px] font-bold flex items-center gap-1"
-                              title={holidayInfo.tooltipText}
+                            <button
+                              type="button"
+                              onClick={() => setHolidayTargetColleague(col)}
+                              className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-amber-900 text-[9px] font-bold flex items-center gap-1 hover:bg-amber-200 transition-colors cursor-pointer"
+                              title={`${holidayInfo.tooltipText} • Cliquez pour modifier la période`}
                             >
                               <Palmtree className="w-2.5 h-2.5 text-amber-600" />
                               <span>{holidayInfo.badgeLabel}</span>
-                            </span>
+                            </button>
                           )}
 
                           {holidayInfo.state === 'upcoming_period' && (
-                            <span
-                              className="px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-800 text-[9px] font-medium flex items-center gap-1"
-                              title={holidayInfo.tooltipText}
+                            <button
+                              type="button"
+                              onClick={() => setHolidayTargetColleague(col)}
+                              className="px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-800 text-[9px] font-medium flex items-center gap-1 hover:bg-sky-100 transition-colors cursor-pointer"
+                              title={`${holidayInfo.tooltipText} • Cliquez pour modifier la période`}
                             >
                               <Calendar className="w-2.5 h-2.5 text-sky-600" />
                               <span>{holidayInfo.badgeLabel}</span>
-                            </span>
+                            </button>
                           )}
 
                           {holidayInfo.state === 'manual' && (
-                            <span
-                              className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-amber-900 text-[9px] font-bold flex items-center gap-1"
-                              title={holidayInfo.tooltipText}
+                            <button
+                              type="button"
+                              onClick={() => setHolidayTargetColleague(col)}
+                              className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-amber-900 text-[9px] font-bold flex items-center gap-1 hover:bg-amber-200 transition-colors cursor-pointer"
+                              title="En congé (sans date programmée) • Cliquez pour définir des dates de retour automatique"
                             >
                               <Palmtree className="w-2.5 h-2.5 text-amber-600" />
                               <span>En congé</span>
-                            </span>
+                            </button>
                           )}
                         </div>
 
@@ -676,6 +676,13 @@ export const ColleaguesTab: React.FC<ColleaguesTabProps> = ({
       </div>
     </div>
   )}
+
+  <HolidayModal
+    isOpen={Boolean(holidayTargetColleague)}
+    onClose={() => setHolidayTargetColleague(null)}
+    colleague={holidayTargetColleague}
+    onSaveHoliday={handleSaveHolidayDates}
+  />
 </div>
   );
 };
